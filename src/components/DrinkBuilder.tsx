@@ -194,21 +194,21 @@ export default function DrinkBuilder({ onOrderSuccess }: { onOrderSuccess: (poin
   const layers = getCupLayers();
 
   return (
-    <div id="drink-builder" className="grid grid-cols-1 lg:grid-cols-12 gap-8 bg-[#1a1513] p-6 rounded-2xl border border-[#2c221e]">
+    <div id="drink-builder" className="grid grid-cols-1 lg:grid-cols-12 gap-8 bg-[#102418] p-6 rounded-2xl border border-[#1d432d]">
       
       {/* 1. Real-time Visual Cup Stage */}
-      <div className="lg:col-span-5 flex flex-col justify-between bg-[#120f0e] rounded-xl p-6 border border-[#251e1b] min-h-[380px] text-center overflow-hidden">
+      <div className="lg:col-span-5 flex flex-col justify-between bg-[#0a1810] rounded-xl p-6 border border-[#1d432d] min-h-[380px] text-center overflow-hidden">
         <div>
-          <span className="text-[10px] font-mono text-[#c89d7c] bg-[#c89d7c]/10 border border-[#c89d7c]/20 px-2.5 py-0.5 rounded-full uppercase tracking-wider font-bold">
+          <span className="text-[10px] font-mono text-[#38a15b] bg-[#22683e]/20 border border-[#22683e]/40 px-2.5 py-0.5 rounded-full uppercase tracking-wider font-bold">
             Real-time Cup Visualizer
           </span>
           <h4 className="text-lg font-bold text-white mt-1.5 font-display">{drink.size} Custom {drink.coffee}</h4>
-          <p className="text-[11px] text-stone-500 font-mono mt-0.5">{drink.temp === "hot" ? "🔥 BREWING HOT" : "❄️ ICED SHAKE"}</p>
+          <p className="text-[11px] text-stone-400 font-mono mt-0.5">{drink.temp === "hot" ? "🔥 BREWING HOT" : "❄️ ICED SHAKE"}</p>
         </div>
 
         {/* The Graphic Coffee Glass */}
         <div className="flex-1 flex items-center justify-center relative my-6">
-          <div className="relative w-44 h-56 border-x-4 border-b-4 border-[#3a2f2b]/40 rounded-b-[40px] rounded-t-[10px] overflow-hidden flex flex-col-reverse shadow-2xl bg-stone-900/10">
+          <div className="relative w-44 h-56 border-x-4 border-b-4 border-[#1d432d]/80 rounded-b-[40px] rounded-t-[10px] overflow-hidden flex flex-col-reverse shadow-2xl bg-[#0a1810]">
             
             {/* Visual Glass Reflection Accent */}
             <div className="absolute inset-y-0 right-4 w-4 bg-white/5 skew-x-12 pointer-events-none z-20"></div>
@@ -241,7 +241,7 @@ export default function DrinkBuilder({ onOrderSuccess }: { onOrderSuccess: (poin
             {drink.toppings !== "none" && (
               <div className="absolute top-0 inset-x-0 h-4 flex justify-center items-center gap-1 z-15 select-none pointer-events-none">
                 {drink.toppings === "cocoa" && <span className="text-[9px] text-[#3d2c20]">🍫🍫🍫</span>}
-                {drink.toppings === "barley" && <span className="text-[9px] text-[#c89d7c]">🌾🌾🌾</span>}
+                {drink.toppings === "barley" && <span className="text-[9px] text-[#38a15b]">🌾🌾🌾</span>}
                 {drink.toppings === "cinnamon-dust" && <span className="text-[9px] text-[#8e4a23]">🍂🍂🍂</span>}
               </div>
             )}
@@ -249,7 +249,7 @@ export default function DrinkBuilder({ onOrderSuccess }: { onOrderSuccess: (poin
 
           {/* Steam animation if hot */}
           {drink.temp === "hot" && (
-            <div className="absolute -top-4 inset-x-0 flex justify-center gap-4 text-xs select-none text-[#c89d7c]/30 pointer-events-none">
+            <div className="absolute -top-4 inset-x-0 flex justify-center gap-4 text-xs select-none text-[#38a15b]/40 pointer-events-none">
               <motion.span animate={{ y: [0, -15, 0], opacity: [0, 1, 0] }} transition={{ repeat: Infinity, duration: 2.2, ease: "easeInOut" }}>♨️</motion.span>
               <motion.span animate={{ y: [0, -18, 0], opacity: [0, 1, 0] }} transition={{ repeat: Infinity, duration: 2.8, ease: "easeInOut", delay: 0.4 }}>♨️</motion.span>
               <motion.span animate={{ y: [0, -13, 0], opacity: [0, 1, 0] }} transition={{ repeat: Infinity, duration: 1.8, ease: "easeInOut", delay: 0.8 }}>♨️</motion.span>
@@ -258,18 +258,18 @@ export default function DrinkBuilder({ onOrderSuccess }: { onOrderSuccess: (poin
         </div>
 
         {/* Stats and pricing dashboard */}
-        <div className="grid grid-cols-3 gap-2 pt-3 border-t border-[#1f1a18]">
-          <div className="bg-[#191412] p-2 rounded-lg border border-[#231b18]">
-            <p className="text-[9px] font-mono text-stone-500 uppercase">Estimated Calories</p>
+        <div className="grid grid-cols-3 gap-2 pt-3 border-t border-[#1d432d]">
+          <div className="bg-[#12281b] p-2 rounded-lg border border-[#1d432d]">
+            <p className="text-[9px] font-mono text-stone-400 uppercase">Estimated Calories</p>
             <p className="text-sm font-bold font-mono text-white mt-0.5">{calories} kcal</p>
           </div>
-          <div className="bg-[#191412] p-2 rounded-lg border border-[#231b18]">
-            <p className="text-[9px] font-mono text-stone-500 uppercase">Estimated Caffeine</p>
+          <div className="bg-[#12281b] p-2 rounded-lg border border-[#1d432d]">
+            <p className="text-[9px] font-mono text-stone-400 uppercase">Estimated Caffeine</p>
             <p className="text-sm font-bold font-mono text-white mt-0.5">{caffeine} mg</p>
           </div>
-          <div className="bg-[#191412] p-2 rounded-lg border border-[#231b18] text-right">
-            <p className="text-[9px] font-mono text-[#c89d7c] uppercase">Final Price</p>
-            <p className="text-sm font-black font-mono text-[#c89d7c] mt-0.5">{price.toFixed(2)} Birr</p>
+          <div className="bg-[#12281b] p-2 rounded-lg border border-[#1d432d] text-right">
+            <p className="text-[9px] font-mono text-[#38a15b] uppercase">Final Price</p>
+            <p className="text-sm font-black font-mono text-[#38a15b] mt-0.5">{price.toFixed(2)} Birr</p>
           </div>
         </div>
       </div>
@@ -280,7 +280,7 @@ export default function DrinkBuilder({ onOrderSuccess }: { onOrderSuccess: (poin
           
           {/* Base Selection */}
           <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-mono text-stone-500 uppercase">Coffee Base Type</label>
+            <label className="text-xs font-mono text-stone-400 uppercase">Coffee Base Type</label>
             <div className="grid grid-cols-2 gap-1.5">
               {['Espresso', 'Jebena Brew', 'Cold Brew', 'Pour Over'].map((base) => (
                 <button
@@ -288,8 +288,8 @@ export default function DrinkBuilder({ onOrderSuccess }: { onOrderSuccess: (poin
                   onClick={() => setDrink(prev => ({ ...prev, coffee: base as any }))}
                   className={`px-3 py-2.5 rounded-xl text-xs text-left transition-all ${
                     drink.coffee === base
-                      ? "bg-[#c89d7c]/20 border-[#c89d7c] text-white font-bold border"
-                      : "bg-[#120f0e] text-stone-400 hover:text-white border border-[#231b18]"
+                      ? "bg-[#22683e]/30 border-[#38a15b] text-white font-bold border"
+                      : "bg-[#0a1810] text-stone-300 hover:text-white border border-[#1d432d]"
                   }`}
                 >
                   {base}
@@ -301,14 +301,14 @@ export default function DrinkBuilder({ onOrderSuccess }: { onOrderSuccess: (poin
           {/* Size & Temp */}
           <div className="grid grid-cols-2 gap-2">
             <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-mono text-stone-500 uppercase">Size</label>
-              <div className="flex rounded-xl overflow-hidden border border-[#231b18] p-1 bg-[#120f0e] h-[42px] items-center">
+              <label className="text-xs font-mono text-stone-400 uppercase">Size</label>
+              <div className="flex rounded-xl overflow-hidden border border-[#1d432d] p-1 bg-[#0a1810] h-[42px] items-center">
                 {['Regular', 'Large'].map((s) => (
                   <button
                     key={s}
                     onClick={() => setDrink(prev => ({ ...prev, size: s as any }))}
                     className={`flex-1 text-[11px] font-bold py-1.5 rounded-lg transition-all ${
-                      drink.size === s ? "bg-[#c89d7c] text-black" : "text-stone-400 hover:text-stone-200"
+                      drink.size === s ? "bg-[#22683e] text-white" : "text-stone-400 hover:text-stone-200"
                     }`}
                   >
                     {s}
@@ -318,14 +318,14 @@ export default function DrinkBuilder({ onOrderSuccess }: { onOrderSuccess: (poin
             </div>
 
             <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-mono text-stone-500 uppercase">Temperature</label>
-              <div className="flex rounded-xl overflow-hidden border border-[#231b18] p-1 bg-[#120f0e] h-[42px] items-center">
+              <label className="text-xs font-mono text-stone-400 uppercase">Temperature</label>
+              <div className="flex rounded-xl overflow-hidden border border-[#1d432d] p-1 bg-[#0a1810] h-[42px] items-center">
                 {(['hot', 'iced'] as any[]).map((t) => (
                   <button
                     key={t}
                     onClick={() => setDrink(prev => ({ ...prev, temp: t, ice: t === 'iced' ? 'regular' : 'none' }))}
                     className={`flex-1 text-[11px] font-bold py-1.5 rounded-lg transition-all uppercase ${
-                      drink.temp === t ? t === 'hot' ? "bg-amber-700 text-white" : "bg-blue-800 text-white" : "text-stone-400 hover:text-stone-200"
+                      drink.temp === t ? t === 'hot' ? "bg-amber-700 text-white" : "bg-emerald-700 text-white" : "text-stone-400 hover:text-stone-200"
                     }`}
                   >
                     {t}
@@ -337,14 +337,14 @@ export default function DrinkBuilder({ onOrderSuccess }: { onOrderSuccess: (poin
 
           {/* Espresso Shots */}
           <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-mono text-stone-500 uppercase">Extra Espresso Shots (+25.00 Birr/ea)</label>
-            <div className="flex justify-between rounded-xl border border-[#231b18] p-1 bg-[#120f0e]">
+            <label className="text-xs font-mono text-stone-400 uppercase">Extra Espresso Shots (+25.00 Birr/ea)</label>
+            <div className="flex justify-between rounded-xl border border-[#1d432d] p-1 bg-[#0a1810]">
               {[0, 1, 2, 3].map((num) => (
                 <button
                   key={num}
                   onClick={() => setDrink(prev => ({ ...prev, shots: num as any }))}
                   className={`h-8 w-10 text-xs font-bold rounded-lg transition-all ${
-                    drink.shots === num ? "bg-[#c89d7c] text-black" : "text-stone-400 hover:text-stone-200"
+                    drink.shots === num ? "bg-[#22683e] text-white" : "text-stone-400 hover:text-stone-200"
                   }`}
                 >
                   +{num}
@@ -355,11 +355,11 @@ export default function DrinkBuilder({ onOrderSuccess }: { onOrderSuccess: (poin
 
           {/* Milk Options */}
           <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-mono text-stone-500 uppercase">Milk Choice</label>
+            <label className="text-xs font-mono text-stone-400 uppercase">Milk Choice</label>
             <select
               value={drink.milk}
               onChange={(e) => setDrink(prev => ({ ...prev, milk: e.target.value as any }))}
-              className="bg-[#120f0e] border border-[#231b18] rounded-xl px-3 py-2.5 text-xs text-stone-300 focus:outline-none focus:border-[#c89d7c] w-full"
+              className="bg-[#0a1810] border border-[#1d432d] rounded-xl px-3 py-2.5 text-xs text-stone-200 focus:outline-none focus:border-[#38a15b] w-full"
             >
               <option value="none">Black Coffee (No Milk)</option>
               <option value="whole">Velvety Whole Milk</option>
@@ -371,11 +371,11 @@ export default function DrinkBuilder({ onOrderSuccess }: { onOrderSuccess: (poin
 
           {/* Syrups & Spices */}
           <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-mono text-stone-500 uppercase">Traditional Syrups / Flavors</label>
+            <label className="text-xs font-mono text-stone-400 uppercase">Traditional Syrups / Flavors</label>
             <select
               value={drink.syrup}
               onChange={(e) => setDrink(prev => ({ ...prev, syrup: e.target.value as any }))}
-              className="bg-[#120f0e] border border-[#231b18] rounded-xl px-3 py-2.5 text-xs text-stone-300 focus:outline-none focus:border-[#c89d7c] w-full"
+              className="bg-[#0a1810] border border-[#1d432d] rounded-xl px-3 py-2.5 text-xs text-stone-200 focus:outline-none focus:border-[#38a15b] w-full"
             >
               <option value="none">No Sweetener</option>
               <option value="cardamom">Cardamom Infused Syrup (+15.00 Birr)</option>
@@ -387,11 +387,11 @@ export default function DrinkBuilder({ onOrderSuccess }: { onOrderSuccess: (poin
 
           {/* Foam Style */}
           <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-mono text-stone-500 uppercase">Foam Finish</label>
+            <label className="text-xs font-mono text-stone-400 uppercase">Foam Finish</label>
             <select
               value={drink.foam}
               onChange={(e) => setDrink(prev => ({ ...prev, foam: e.target.value as any }))}
-              className="bg-[#120f0e] border border-[#231b18] rounded-xl px-3 py-2.5 text-xs text-stone-300 focus:outline-none focus:border-[#c89d7c] w-full"
+              className="bg-[#0a1810] border border-[#1d432d] rounded-xl px-3 py-2.5 text-xs text-stone-200 focus:outline-none focus:border-[#38a15b] w-full"
             >
               <option value="none">No Foam layer</option>
               <option value="microfoam">Velvety Microfoam (+12.00 Birr)</option>
@@ -402,11 +402,11 @@ export default function DrinkBuilder({ onOrderSuccess }: { onOrderSuccess: (poin
 
           {/* Toppings Choice */}
           <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-mono text-stone-500 uppercase">Aromatic Toppings (+10.00 Birr)</label>
+            <label className="text-xs font-mono text-stone-400 uppercase">Aromatic Toppings (+10.00 Birr)</label>
             <select
               value={drink.toppings}
               onChange={(e) => setDrink(prev => ({ ...prev, toppings: e.target.value as any }))}
-              className="bg-[#120f0e] border border-[#231b18] rounded-xl px-3 py-2.5 text-xs text-stone-300 focus:outline-none focus:border-[#c89d7c] w-full"
+              className="bg-[#0a1810] border border-[#1d432d] rounded-xl px-3 py-2.5 text-xs text-stone-200 focus:outline-none focus:border-[#38a15b] w-full"
             >
               <option value="none">No Toppings</option>
               <option value="cocoa">Raw Organic Cocoa Powder</option>
@@ -418,14 +418,14 @@ export default function DrinkBuilder({ onOrderSuccess }: { onOrderSuccess: (poin
           {/* Ice Modifier */}
           {drink.temp === "iced" && (
             <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-mono text-stone-500 uppercase">Ice Level</label>
-              <div className="flex justify-between rounded-xl border border-[#231b18] p-1 bg-[#120f0e] h-[42px] items-center">
+              <label className="text-xs font-mono text-stone-400 uppercase">Ice Level</label>
+              <div className="flex justify-between rounded-xl border border-[#1d432d] p-1 bg-[#0a1810] h-[42px] items-center">
                 {['light', 'regular', 'extra'].map((iLevel) => (
                   <button
                     key={iLevel}
                     onClick={() => setDrink(prev => ({ ...prev, ice: iLevel as any }))}
                     className={`flex-1 text-[11px] font-bold py-1.5 rounded-lg transition-all capitalize ${
-                      drink.ice === iLevel ? "bg-stone-800 text-white" : "text-stone-400 hover:text-stone-200"
+                      drink.ice === iLevel ? "bg-[#22683e] text-white" : "text-stone-400 hover:text-stone-200"
                     }`}
                   >
                     {iLevel}
@@ -438,7 +438,7 @@ export default function DrinkBuilder({ onOrderSuccess }: { onOrderSuccess: (poin
         </div>
 
         {/* Trigger purchase section */}
-        <div className="mt-6 pt-6 border-t border-[#2c221e] flex flex-col gap-3">
+        <div className="mt-6 pt-6 border-t border-[#1d432d] flex flex-col gap-3">
           
           <AnimatePresence>
             {successMsg && (
@@ -446,7 +446,7 @@ export default function DrinkBuilder({ onOrderSuccess }: { onOrderSuccess: (poin
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: "auto" }}
                 exit={{ opacity: 0, height: 0 }}
-                className="bg-[#1e2a22] border border-[#2e4c35] text-[#82ca9d] text-xs font-mono p-3 rounded-xl flex items-center justify-between"
+                className="bg-[#12281b] border border-[#1d432d] text-[#38a15b] text-xs font-mono p-3 rounded-xl flex items-center justify-between"
               >
                 <span>🎉 {successMsg} (+1 Virtual Lucky Bean added)</span>
                 <button onClick={() => setSuccessMsg(null)} className="text-stone-400 hover:text-white">✕</button>
@@ -457,21 +457,21 @@ export default function DrinkBuilder({ onOrderSuccess }: { onOrderSuccess: (poin
           <div className="flex gap-2">
             <button
               onClick={handleReset}
-              className="px-4 py-3.5 rounded-xl bg-[#120f0e] hover:bg-[#181412] border border-[#2c221e] text-stone-400 hover:text-stone-200 text-xs transition-all flex items-center gap-2 font-semibold"
+              className="px-4 py-3.5 rounded-xl bg-[#0a1810] hover:bg-[#12281b] border border-[#1d432d] text-stone-400 hover:text-stone-200 text-xs transition-all flex items-center gap-2 font-semibold"
             >
               <RotateCcw size={14} /> Clear Selection
             </button>
             <button
               onClick={handleOrder}
               disabled={loading}
-              className="flex-1 bg-[#c89d7c] hover:bg-[#b08766] text-[#120f0e] font-black text-xs py-3.5 px-6 rounded-xl transition-all duration-300 flex items-center justify-center gap-2 shadow-lg shadow-amber-950/25"
+              className="flex-1 bg-[#22683e] hover:bg-[#1a5230] text-white font-black text-xs py-3.5 px-6 rounded-xl transition-all duration-300 flex items-center justify-center gap-2 shadow-lg shadow-emerald-950/20"
             >
               {loading ? (
-                <div className="animate-spin rounded-full h-4 w-4 border-2 border-[#120f0e]"></div>
+                <div className="animate-spin rounded-full h-4 w-4 border-2 border-white"></div>
               ) : (
                 <>
                   <span>☕ Purchase & Brew Custom Drink</span>
-                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-black/15 text-black">{price.toFixed(2)} Birr</span>
+                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-black/20 text-white">{price.toFixed(2)} Birr</span>
                 </>
               )}
             </button>

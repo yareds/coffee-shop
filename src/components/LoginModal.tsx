@@ -98,31 +98,52 @@ export default function LoginModal({
     }
   };
 
-  const handleAdminLogin = (e: React.FormEvent) => {
+  const handleAdminLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    setAdminLoading(true);
-    setAdminError(null);
-
-    // Accept 1234, admin, or admin888 as valid admin PINs
-    const validPins = ["1234", "admin", "admin888"];
-    if (!validPins.includes(adminPin.trim().toLowerCase())) {
-      setAdminError("Invalid Admin PIN. (Default PIN is 1234)");
-      setAdminLoading(false);
+    if (!adminPin.trim()) {
+      setAdminError("Please enter the Admin PIN.");
       return;
     }
 
-    const adminUser: AuthUser = {
-      role: 'admin',
-      name: 'Buna Store Admin',
-      email: 'admin@bunacoffee.eth'
-    };
+    setAdminLoading(true);
+    setAdminError(null);
 
-    onLoginSuccess(
-      adminUser,
-      "👑 Admin authentication successful! Full Owner Portal unlocked."
-    );
-    setAdminLoading(false);
-    onClose();
+    try {
+      const res = await fetch("/api/owner/verify-pin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ adminPin: adminPin.trim() })
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        setAdminError(data.error || "Invalid Admin PIN. (Default PIN is 2026)");
+        setAdminLoading(false);
+        return;
+      }
+
+      // Store Token & PIN for authenticated requests
+      if (data.token) {
+        localStorage.setItem("buna_admin_token", data.token);
+      }
+      localStorage.setItem("buna_admin_pin", adminPin.trim());
+
+      const adminUser: AuthUser = data.adminUser || {
+        role: 'admin',
+        name: 'Buna Store Admin',
+        email: 'admin@bunacoffee.eth'
+      };
+
+      onLoginSuccess(
+        adminUser,
+        "👑 Admin authentication successful! Full Owner Portal unlocked."
+      );
+      onClose();
+    } catch (err: any) {
+      setAdminError("Server error verifying Admin PIN. Please check connection.");
+    } finally {
+      setAdminLoading(false);
+    }
   };
 
   return (
@@ -133,33 +154,33 @@ export default function LoginModal({
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.95, y: 20 }}
           transition={{ duration: 0.2, ease: "easeOut" }}
-          className="relative w-full max-w-md bg-[#14100e] border border-white/10 rounded-3xl p-6 md:p-8 shadow-2xl text-[#f7f4f2] overflow-hidden"
+          className="relative w-full max-w-md bg-[#102418] border border-[#1d432d] rounded-3xl p-6 md:p-8 shadow-2xl text-stone-100 overflow-hidden"
           style={{
             fontFamily: `-apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "SF Pro", "Segoe UI", Roboto, sans-serif`
           }}
         >
           {/* Subtle Ambient Background Flare */}
-          <div className="absolute -top-24 -right-24 w-60 h-60 rounded-full bg-[#c89d7c]/10 blur-3xl pointer-events-none" />
-          <div className="absolute -bottom-24 -left-24 w-60 h-60 rounded-full bg-red-500/5 blur-3xl pointer-events-none" />
+          <div className="absolute -top-24 -right-24 w-60 h-60 rounded-full bg-[#38a15b]/10 blur-3xl pointer-events-none" />
+          <div className="absolute -bottom-24 -left-24 w-60 h-60 rounded-full bg-[#22683e]/10 blur-3xl pointer-events-none" />
 
           {/* Close Button */}
           <button
             onClick={onClose}
-            className="absolute top-5 right-5 h-8 w-8 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-stone-400 hover:text-white hover:bg-white/10 transition-all"
+            className="absolute top-5 right-5 h-8 w-8 rounded-full bg-[#0a1810] border border-[#1d432d] flex items-center justify-center text-stone-400 hover:text-white hover:bg-[#12281b] transition-all"
           >
             <X size={16} />
           </button>
 
           {/* Header Title */}
           <div className="flex items-center gap-3 mb-6">
-            <div className="h-11 w-11 rounded-2xl bg-gradient-to-br from-[#c89d7c]/20 to-[#2c1a11] border border-[#c89d7c]/30 flex items-center justify-center text-xl shadow-inner text-[#c89d7c]">
+            <div className="h-11 w-11 rounded-2xl bg-[#0a1810] border border-[#1d432d] flex items-center justify-center text-xl shadow-inner text-[#38a15b]">
               {activeTab === 'user' ? <User size={22} /> : <ShieldCheck size={22} />}
             </div>
             <div>
               <h3 className="text-xl font-semibold tracking-tight text-white">
                 {activeTab === 'user' ? "Customer Sign In" : "Admin Authentication"}
               </h3>
-              <p className="text-xs text-stone-400 font-normal">
+              <p className="text-xs text-stone-300 font-normal">
                 {activeTab === 'user' 
                   ? "Access your Buna loyalty, passport, & beans" 
                   : "Owner portal & shop management controls"}
@@ -168,7 +189,7 @@ export default function LoginModal({
           </div>
 
           {/* Tab Switcher (Apple Style Segmented Control) */}
-          <div className="grid grid-cols-2 p-1 mb-6 rounded-xl bg-white/[0.04] border border-white/[0.08] backdrop-blur-md">
+          <div className="grid grid-cols-2 p-1 mb-6 rounded-xl bg-[#0a1810] border border-[#1d432d] backdrop-blur-md">
             <button
               type="button"
               onClick={() => {
@@ -177,7 +198,7 @@ export default function LoginModal({
               }}
               className={`py-2 px-3 rounded-lg text-xs font-medium transition-all flex items-center justify-center gap-2 ${
                 activeTab === 'user'
-                  ? "bg-white text-black font-semibold shadow-sm"
+                  ? "bg-[#22683e] text-white font-semibold shadow-sm"
                   : "text-stone-400 hover:text-white"
               }`}
             >
@@ -192,7 +213,7 @@ export default function LoginModal({
               }}
               className={`py-2 px-3 rounded-lg text-xs font-medium transition-all flex items-center justify-center gap-2 ${
                 activeTab === 'admin'
-                  ? "bg-[#c89d7c] text-black font-semibold shadow-sm"
+                  ? "bg-[#22683e] text-white font-semibold shadow-sm"
                   : "text-stone-400 hover:text-white"
               }`}
             >
@@ -219,7 +240,7 @@ export default function LoginModal({
                   placeholder="e.g. Abebe Bikila"
                   value={userName}
                   onChange={(e) => setUserName(e.target.value)}
-                  className="w-full px-4 py-3 rounded-xl bg-white/[0.03] border border-white/10 text-white placeholder:text-stone-500 text-sm focus:outline-none focus:border-[#c89d7c] transition-all"
+                  className="w-full px-4 py-3 rounded-xl bg-[#0a1810] border border-[#1d432d] text-white placeholder:text-stone-500 text-sm focus:outline-none focus:border-[#38a15b] transition-all"
                   required
                 />
               </div>
@@ -233,7 +254,7 @@ export default function LoginModal({
                   placeholder="name@example.com"
                   value={userEmail}
                   onChange={(e) => setUserEmail(e.target.value)}
-                  className="w-full px-4 py-3 rounded-xl bg-white/[0.03] border border-white/10 text-white placeholder:text-stone-500 text-sm focus:outline-none focus:border-[#c89d7c] transition-all"
+                  className="w-full px-4 py-3 rounded-xl bg-[#0a1810] border border-[#1d432d] text-white placeholder:text-stone-500 text-sm focus:outline-none focus:border-[#38a15b] transition-all"
                   required
                 />
               </div>
@@ -241,7 +262,7 @@ export default function LoginModal({
               <button
                 type="submit"
                 disabled={userLoading}
-                className="w-full mt-2 py-3.5 px-4 rounded-xl bg-[#c89d7c] hover:bg-[#d8ad8c] text-black font-semibold text-sm transition-all flex items-center justify-center gap-2 shadow-lg shadow-[#c89d7c]/10"
+                className="w-full mt-2 py-3.5 px-4 rounded-xl bg-[#22683e] hover:bg-[#1a5230] text-white font-bold text-sm transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-950/20"
               >
                 {userLoading ? (
                   <span>Signing In...</span>
@@ -253,7 +274,7 @@ export default function LoginModal({
                 )}
               </button>
 
-              <p className="text-[11px] text-stone-500 text-center mt-1">
+              <p className="text-[11px] text-stone-400 text-center mt-1">
                 New guests are automatically enrolled in the Buna Loyalty Program.
               </p>
             </form>
@@ -268,7 +289,7 @@ export default function LoginModal({
                 </div>
               )}
 
-              <div className="p-3 rounded-xl bg-[#c89d7c]/10 border border-[#c89d7c]/20 text-[#c89d7c] text-xs flex items-center gap-2.5">
+              <div className="p-3 rounded-xl bg-[#22683e]/20 border border-[#22683e]/40 text-[#38a15b] text-xs flex items-center gap-2.5">
                 <KeyRound size={16} className="shrink-0" />
                 <span>
                   Default Admin PIN: <strong className="font-mono text-white">1234</strong>
@@ -285,7 +306,7 @@ export default function LoginModal({
                     placeholder="Enter PIN (1234)"
                     value={adminPin}
                     onChange={(e) => setAdminPin(e.target.value)}
-                    className="w-full px-4 py-3 pl-10 rounded-xl bg-white/[0.03] border border-white/10 text-white placeholder:text-stone-500 text-sm focus:outline-none focus:border-[#c89d7c] transition-all font-mono"
+                    className="w-full px-4 py-3 pl-10 rounded-xl bg-[#0a1810] border border-[#1d432d] text-white placeholder:text-stone-500 text-sm focus:outline-none focus:border-[#38a15b] transition-all font-mono"
                     required
                   />
                   <Lock size={16} className="absolute left-3.5 top-3.5 text-stone-400" />
@@ -295,7 +316,7 @@ export default function LoginModal({
               <button
                 type="submit"
                 disabled={adminLoading}
-                className="w-full mt-2 py-3.5 px-4 rounded-xl bg-gradient-to-r from-[#c89d7c] to-[#a87d5c] hover:from-[#d8ad8c] hover:to-[#b88d6c] text-black font-semibold text-sm transition-all flex items-center justify-center gap-2 shadow-lg shadow-[#c89d7c]/15"
+                className="w-full mt-2 py-3.5 px-4 rounded-xl bg-[#22683e] hover:bg-[#1a5230] text-white font-bold text-sm transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-950/20"
               >
                 {adminLoading ? (
                   <span>Authenticating...</span>
@@ -307,7 +328,7 @@ export default function LoginModal({
                 )}
               </button>
 
-              <p className="text-[11px] text-stone-500 text-center mt-1">
+              <p className="text-[11px] text-stone-400 text-center mt-1">
                 Grants real-time revenue stats, menu editor, and raffle prize controls.
               </p>
             </form>

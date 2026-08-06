@@ -170,12 +170,12 @@ export default function BrewTimer() {
   const progressPercent = ((method.totalTime - timeLeft) / method.totalTime) * 100;
 
   return (
-    <div id="brew-timer" className="grid grid-cols-1 lg:grid-cols-12 gap-8 bg-[#1a1513] p-6 rounded-2xl border border-[#2c221e]">
+    <div id="brew-timer" className="grid grid-cols-1 lg:grid-cols-12 gap-8 bg-[#102418] p-6 rounded-2xl border border-[#1d432d]">
       
       {/* 1. Timer Clock face and visual countdown */}
-      <div className="lg:col-span-5 flex flex-col justify-between bg-[#120f0e] rounded-xl p-6 border border-[#251e1b] min-h-[380px] text-center relative overflow-hidden">
+      <div className="lg:col-span-5 flex flex-col justify-between bg-[#0a1810] rounded-xl p-6 border border-[#1d432d] min-h-[380px] text-center relative overflow-hidden">
         <div>
-          <span className="text-[10px] font-mono text-[#c89d7c] bg-[#c89d7c]/10 border border-[#c89d7c]/20 px-2.5 py-0.5 rounded-full uppercase tracking-wider font-bold">
+          <span className="text-[10px] font-mono text-[#38a15b] bg-[#22683e]/20 border border-[#22683e]/40 px-2.5 py-0.5 rounded-full uppercase tracking-wider font-bold">
             BREW MASTER TIMER
           </span>
           <h4 className="text-xl font-bold text-white mt-1.5 font-display">{method.name}</h4>
@@ -184,12 +184,12 @@ export default function BrewTimer() {
         {/* Big visual countdown wheel */}
         <div className="my-6 relative flex items-center justify-center">
           <svg className="w-48 h-48 transform -rotate-90">
-            <circle cx="96" cy="96" r="84" className="stroke-[#201815] stroke-width-4 fill-none" />
+            <circle cx="96" cy="96" r="84" className="stroke-[#12281b] stroke-width-4 fill-none" />
             <motion.circle
               cx="96"
               cy="96"
               r="84"
-              className="stroke-[#c89d7c] stroke-width-6 fill-none"
+              className="stroke-[#38a15b] stroke-width-6 fill-none"
               strokeDasharray={527}
               strokeDashoffset={527 - (527 * progressPercent) / 100}
               transition={{ ease: "linear" }}
@@ -199,7 +199,7 @@ export default function BrewTimer() {
           {/* Core clock text */}
           <div className="absolute flex flex-col items-center justify-center">
             <span className="text-4xl font-black font-mono text-white tracking-tight">{formatTime(timeLeft)}</span>
-            <span className="text-[10px] font-mono text-[#c89d7c] mt-1 uppercase tracking-widest animate-pulse">
+            <span className="text-[10px] font-mono text-[#38a15b] mt-1 uppercase tracking-widest animate-pulse">
               {isRunning ? "Steeping..." : timeLeft === 0 ? "BREAD IS READY! 🎉" : "Ready"}
             </span>
           </div>
@@ -209,14 +209,14 @@ export default function BrewTimer() {
         <div className="flex gap-2">
           <button
             onClick={handleReset}
-            className="px-4 py-3 rounded-xl bg-[#1d1614] border border-[#2c221e] text-stone-400 hover:text-white text-xs font-mono transition-all flex-1"
+            className="px-4 py-3 rounded-xl bg-[#0a1810] border border-[#1d432d] text-stone-300 hover:text-white hover:bg-[#12281b] text-xs font-mono transition-all flex-1"
           >
             Reset
           </button>
           <button
             onClick={handleStartPause}
             className={`px-6 py-3 rounded-xl text-xs font-black transition-all flex-[2] ${
-              isRunning ? "bg-amber-800 text-white" : "bg-[#c89d7c] hover:bg-[#b08766] text-black"
+              isRunning ? "bg-amber-800 text-white" : "bg-[#22683e] hover:bg-[#1a5230] text-white shadow-lg shadow-emerald-950/20"
             }`}
           >
             {isRunning ? "Pause Timer" : "Start Pour"}
@@ -228,15 +228,15 @@ export default function BrewTimer() {
       <div className="lg:col-span-7 flex flex-col justify-between">
         <div>
           {/* Method Selector Tabs */}
-          <div className="flex flex-wrap gap-1.5 mb-6 border-b border-[#231b18] pb-3">
+          <div className="flex flex-wrap gap-1.5 mb-6 border-b border-[#1d432d] pb-3">
             {Object.keys(BREW_METHODS).map((name) => (
               <button
                 key={name}
                 onClick={() => handleMethodChange(name)}
                 className={`px-3 py-1.5 rounded-lg text-xs font-mono transition-all ${
                   activeMethod === name
-                    ? "bg-[#c89d7c] text-black font-bold"
-                    : "bg-[#120f0e] text-stone-400 hover:text-white"
+                    ? "bg-[#22683e] text-white font-bold"
+                    : "bg-[#0a1810] text-stone-300 hover:text-white border border-[#1d432d]"
                 }`}
               >
                 {name}
@@ -246,44 +246,44 @@ export default function BrewTimer() {
 
           {/* Terroir specs */}
           <div className="grid grid-cols-3 gap-2.5 mb-5 text-xs font-mono">
-            <div className="bg-[#120f0e] p-2.5 rounded-lg border border-[#231b18]">
-              <span className="text-[9px] text-stone-500 uppercase block">Ratio</span>
-              <span className="text-stone-300 font-bold">{method.ratio.split(" ")[0]}</span>
+            <div className="bg-[#0a1810] p-2.5 rounded-lg border border-[#1d432d]">
+              <span className="text-[9px] text-stone-400 uppercase block">Ratio</span>
+              <span className="text-stone-200 font-bold">{method.ratio.split(" ")[0]}</span>
             </div>
-            <div className="bg-[#120f0e] p-2.5 rounded-lg border border-[#231b18]">
-              <span className="text-[9px] text-stone-500 uppercase block">Grind</span>
-              <span className="text-stone-300 font-bold truncate block" title={method.grind}>{method.grind}</span>
+            <div className="bg-[#0a1810] p-2.5 rounded-lg border border-[#1d432d]">
+              <span className="text-[9px] text-stone-400 uppercase block">Grind</span>
+              <span className="text-stone-200 font-bold truncate block" title={method.grind}>{method.grind}</span>
             </div>
-            <div className="bg-[#120f0e] p-2.5 rounded-lg border border-[#231b18]">
-              <span className="text-[9px] text-stone-500 uppercase block">Temp</span>
-              <span className="text-stone-300 font-bold">{method.temp}</span>
+            <div className="bg-[#0a1810] p-2.5 rounded-lg border border-[#1d432d]">
+              <span className="text-[9px] text-stone-400 uppercase block">Temp</span>
+              <span className="text-stone-200 font-bold">{method.temp}</span>
             </div>
           </div>
 
           {/* Active step guide instructions */}
-          <div className="bg-[#120f0e] rounded-xl p-4 border border-[#231b18] mb-6">
-            <h5 className="text-xs font-mono text-[#c89d7c] uppercase tracking-wider mb-2 flex items-center gap-1.5">
+          <div className="bg-[#0a1810] rounded-xl p-4 border border-[#1d432d] mb-6">
+            <h5 className="text-xs font-mono text-[#38a15b] uppercase tracking-wider mb-2 flex items-center gap-1.5">
               <Clock size={12} /> Active Barista Instructions
             </h5>
             <div className="min-h-[50px] flex items-center">
-              <p className="text-sm text-stone-200 font-semibold leading-relaxed">
+              <p className="text-sm text-stone-100 font-semibold leading-relaxed">
                 {activeStep.text}
               </p>
             </div>
           </div>
 
           {/* Barista tips */}
-          <div className="flex flex-col gap-1.5 mb-6 bg-stone-950/20 p-4 rounded-xl border border-[#221a17]">
-            <span className="text-[10px] font-mono text-[#c89d7c] uppercase tracking-wider font-bold">⭐ Pro-Barista Brewing Tips</span>
+          <div className="flex flex-col gap-1.5 mb-6 bg-[#0a1810] p-4 rounded-xl border border-[#1d432d]">
+            <span className="text-[10px] font-mono text-[#38a15b] uppercase tracking-wider font-bold">⭐ Pro-Barista Brewing Tips</span>
             {method.tips.map((tip, i) => (
-              <p key={i} className="text-xs text-stone-400 leading-normal">• {tip}</p>
+              <p key={i} className="text-xs text-stone-300 leading-normal">• {tip}</p>
             ))}
           </div>
         </div>
 
         {/* Custom recipe vault persistence */}
-        <div className="border-t border-[#231b18] pt-6">
-          <h5 className="text-xs font-mono text-stone-500 uppercase tracking-widest mb-3">Custom Recipe Vault</h5>
+        <div className="border-t border-[#1d432d] pt-6">
+          <h5 className="text-xs font-mono text-stone-400 uppercase tracking-widest mb-3">Custom Recipe Vault</h5>
           
           <div className="flex gap-2 mb-4">
             <input
@@ -291,11 +291,11 @@ export default function BrewTimer() {
               placeholder="Give your custom recipe a name..."
               value={newRecipeName}
               onChange={(e) => setNewRecipeName(e.target.value)}
-              className="flex-1 bg-[#120f0e] border border-[#231b18] rounded-xl px-3 py-2.5 text-xs text-stone-300 placeholder-stone-600 focus:outline-none focus:border-[#c89d7c]"
+              className="flex-1 bg-[#0a1810] border border-[#1d432d] rounded-xl px-3 py-2.5 text-xs text-stone-200 placeholder-stone-500 focus:outline-none focus:border-[#38a15b]"
             />
             <button
               onClick={handleSaveRecipe}
-              className="px-4 py-2 bg-[#1c1412] hover:bg-[#2c211e] border border-[#2c221e] rounded-xl text-xs text-[#c89d7c] transition-all flex items-center gap-1 font-semibold"
+              className="px-4 py-2 bg-[#22683e] hover:bg-[#1a5230] text-white border border-[#38a15b]/30 rounded-xl text-xs transition-all flex items-center gap-1 font-semibold"
             >
               <Plus size={14} /> Save
             </button>
@@ -304,14 +304,14 @@ export default function BrewTimer() {
           {/* Render custom recipes list */}
           <div className="flex flex-col gap-2 max-h-36 overflow-y-auto pr-1">
             {customRecipes.map((r) => (
-              <div key={r.id} className="flex justify-between items-center bg-[#120f0e] p-3 rounded-lg border border-[#251f1c] text-xs">
+              <div key={r.id} className="flex justify-between items-center bg-[#0a1810] p-3 rounded-lg border border-[#1d432d] text-xs">
                 <div>
                   <p className="font-bold text-stone-200">{r.name}</p>
-                  <p className="text-[10px] text-[#c89d7c] mt-0.5">{r.method} | {r.ratio}</p>
+                  <p className="text-[10px] text-[#38a15b] mt-0.5">{r.method} | {r.ratio}</p>
                 </div>
                 <button
                   onClick={() => handleDeleteRecipe(r.id)}
-                  className="text-stone-600 hover:text-red-400 transition-all p-1"
+                  className="text-stone-400 hover:text-red-400 transition-all p-1"
                 >
                   <Trash2 size={13} />
                 </button>

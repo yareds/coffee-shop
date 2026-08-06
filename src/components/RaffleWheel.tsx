@@ -12,12 +12,12 @@ interface RaffleWheelProps {
 }
 
 const DEFAULT_PRIZES = [
-  { name: "Traditional Jebena Brew (Abol)", desc: "Rich and spiced ceremonial pour", color: "bg-[#c89d7c] text-black" },
-  { name: "Yirgacheffe Pour Over", desc: "Floral, bright jasmine & citrus cup", color: "bg-[#2c221e] text-white border border-[#c89d7c]/30" },
-  { name: "Spiced Cardamom Macchiato", desc: "Creamy espresso with house-infused cardamom", color: "bg-[#c89d7c] text-black" },
-  { name: "Sidama Natural Hand-Brew", desc: "Blueberry jam acidity and heavy body", color: "bg-[#2c221e] text-white border border-[#c89d7c]/30" },
-  { name: "Guji Honey Cold Brew", desc: "Sweet, refreshing forest canopy beans", color: "bg-[#c89d7c] text-black" },
-  { name: "Harrar Double Espresso", desc: "Deep chocolate and wild berry undertones", color: "bg-[#2c221e] text-white border border-[#c89d7c]/30" }
+  { name: "Traditional Jebena Brew (Abol)", desc: "Rich and spiced ceremonial pour", color: "bg-[#22683e] text-white" },
+  { name: "Yirgacheffe Pour Over", desc: "Floral, bright jasmine & citrus cup", color: "bg-[#2c221e] text-white border border-[#22683e]/30" },
+  { name: "Spiced Cardamom Macchiato", desc: "Creamy espresso with house-infused cardamom", color: "bg-[#22683e] text-white" },
+  { name: "Sidama Natural Hand-Brew", desc: "Blueberry jam acidity and heavy body", color: "bg-[#2c221e] text-white border border-[#22683e]/30" },
+  { name: "Guji Honey Cold Brew", desc: "Sweet, refreshing forest canopy beans", color: "bg-[#22683e] text-white" },
+  { name: "Harrar Double Espresso", desc: "Deep chocolate and wild berry undertones", color: "bg-[#2c221e] text-white border border-[#22683e]/30" }
 ];
 
 export default function RaffleWheel({ loyalty, authUser, onOpenLogin, onSignupSuccess, onSpinSuccess }: RaffleWheelProps) {
@@ -71,13 +71,18 @@ export default function RaffleWheel({ loyalty, authUser, onOpenLogin, onSignupSu
 
   useEffect(() => {
     fetch("/api/raffle/prizes")
-      .then(res => res.json())
+      .then(res => {
+        if (!res.ok) throw new Error("HTTP error " + res.status);
+        return res.json();
+      })
       .then(data => {
         if (Array.isArray(data) && data.length > 0) {
           setPrizes(data);
         }
       })
-      .catch(e => console.error("Could not fetch raffle prizes:", e));
+      .catch(e => {
+        // Quietly fallback to DEFAULT_PRIZES
+      });
   }, []);
 
   const handleSendOtp = async (e: React.FormEvent) => {
@@ -225,11 +230,11 @@ export default function RaffleWheel({ loyalty, authUser, onOpenLogin, onSignupSu
   };
 
   return (
-    <div className="bg-[#1a1513] border border-[#2c221e] rounded-3xl p-5 md:p-8 max-w-4xl mx-auto shadow-2xl">
+    <div className="bg-[#102418] border border-[#1d432d] rounded-3xl p-5 md:p-8 max-w-4xl mx-auto shadow-2xl">
       
       {/* Dynamic Header */}
       <div className="text-center max-w-2xl mx-auto mb-8">
-        <span className="text-[10px] font-mono px-2.5 py-1 rounded-full bg-[#c89d7c]/10 text-[#c89d7c] border border-[#c89d7c]/20 uppercase tracking-widest inline-flex items-center gap-1.5 font-bold mb-3">
+        <span className="text-[10px] font-mono px-2.5 py-1 rounded-full bg-[#22683e]/20 text-[#38a15b] border border-[#22683e]/30 uppercase tracking-widest inline-flex items-center gap-1.5 font-bold mb-3">
           <Gift size={11} className="animate-pulse" /> Welcome Celebrations
         </span>
         <h3 className="text-3xl font-black text-white font-display tracking-tight">
@@ -249,13 +254,13 @@ export default function RaffleWheel({ loyalty, authUser, onOpenLogin, onSignupSu
             initial={{ opacity: 0, y: 15 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -15 }}
-            className="max-w-xl mx-auto bg-[#120f0e] p-8 rounded-2xl border border-[#c89d7c]/30 shadow-2xl text-center flex flex-col items-center"
+            className="max-w-xl mx-auto bg-[#0a1810] p-8 rounded-2xl border border-[#22683e]/30 shadow-2xl text-center flex flex-col items-center"
           >
-            <div className="h-14 w-14 rounded-2xl bg-[#c89d7c]/10 border border-[#c89d7c]/30 flex items-center justify-center text-[#c89d7c] mb-4">
+            <div className="h-14 w-14 rounded-2xl bg-[#22683e]/20 border border-[#22683e]/30 flex items-center justify-center text-[#38a15b] mb-4">
               <Lock size={28} />
             </div>
             
-            <span className="text-[10px] font-mono px-3 py-1 rounded-full bg-[#c89d7c]/10 text-[#c89d7c] border border-[#c89d7c]/20 uppercase tracking-widest font-bold mb-2">
+            <span className="text-[10px] font-mono px-3 py-1 rounded-full bg-[#22683e]/20 text-[#38a15b] border border-[#22683e]/30 uppercase tracking-widest font-bold mb-2">
               Logged-In Members Only
             </span>
 
@@ -269,7 +274,7 @@ export default function RaffleWheel({ loyalty, authUser, onOpenLogin, onSignupSu
 
             <button
               onClick={onOpenLogin}
-              className="px-6 py-3.5 rounded-xl bg-gradient-to-r from-[#c89d7c] via-[#dcb18f] to-[#c89d7c] hover:from-[#d8ad8c] hover:to-[#d8ad8c] text-black font-black text-xs uppercase tracking-wider transition-all shadow-xl shadow-[#c89d7c]/20 hover:scale-[1.02] active:scale-[0.98] flex items-center gap-2 cursor-pointer"
+              className="px-6 py-3.5 rounded-xl bg-gradient-to-r from-[#22683e] via-[#38a15b] to-[#22683e] hover:from-[#1c5733] hover:to-[#1c5733] text-white font-black text-xs uppercase tracking-wider transition-all shadow-xl shadow-[#22683e]/20 hover:scale-[1.02] active:scale-[0.98] flex items-center gap-2 cursor-pointer"
             >
               <LogIn size={16} />
               <span>Sign In / Register to Spin 🎯</span>
@@ -282,7 +287,7 @@ export default function RaffleWheel({ loyalty, authUser, onOpenLogin, onSignupSu
             initial={{ opacity: 0, y: 15 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -15 }}
-            className="max-w-md mx-auto bg-[#120f0e] p-6 rounded-2xl border border-[#241c19] shadow-xl"
+            className="max-w-md mx-auto bg-[#0a1810] p-6 rounded-2xl border border-[#1d432d] shadow-xl"
           >
             <div className="text-center mb-5">
               <span className="text-lg">🇪🇹</span>
@@ -310,7 +315,7 @@ export default function RaffleWheel({ loyalty, authUser, onOpenLogin, onSignupSu
                       placeholder="e.g. Abebe Kebede"
                       value={name}
                       onChange={(e) => setName(e.target.value)}
-                      className="w-full bg-[#171311] border border-[#231b18] rounded-xl pl-9 pr-3 py-2.5 text-xs text-white focus:outline-none focus:border-[#c89d7c] transition-all"
+                      className="w-full bg-[#132c1e] border border-[#1d432d] rounded-xl pl-9 pr-3 py-2.5 text-xs text-white focus:outline-none focus:border-[#38a15b] transition-all"
                     />
                     <User size={12} className="absolute left-3 top-3.5 text-stone-600" />
                   </div>
@@ -327,7 +332,7 @@ export default function RaffleWheel({ loyalty, authUser, onOpenLogin, onSignupSu
                       placeholder="e.g. abebe@buna.com"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
-                      className="w-full bg-[#171311] border border-[#231b18] rounded-xl pl-9 pr-3 py-2.5 text-xs text-white focus:outline-none focus:border-[#c89d7c] transition-all"
+                      className="w-full bg-[#132c1e] border border-[#1d432d] rounded-xl pl-9 pr-3 py-2.5 text-xs text-white focus:outline-none focus:border-[#38a15b] transition-all"
                     />
                     <Mail size={12} className="absolute left-3 top-3.5 text-stone-600" />
                   </div>
@@ -344,7 +349,7 @@ export default function RaffleWheel({ loyalty, authUser, onOpenLogin, onSignupSu
                       placeholder="e.g. +1 555-019-9123"
                       value={phone}
                       onChange={(e) => setPhone(e.target.value)}
-                      className="w-full bg-[#171311] border border-[#231b18] rounded-xl pl-9 pr-3 py-2.5 text-xs text-white focus:outline-none focus:border-[#c89d7c] transition-all"
+                      className="w-full bg-[#132c1e] border border-[#1d432d] rounded-xl pl-9 pr-3 py-2.5 text-xs text-white focus:outline-none focus:border-[#38a15b] transition-all"
                     />
                     <Phone size={12} className="absolute left-3 top-3.5 text-stone-600" />
                   </div>
@@ -360,7 +365,7 @@ export default function RaffleWheel({ loyalty, authUser, onOpenLogin, onSignupSu
                 <button
                   type="submit"
                   disabled={sendingOtp}
-                  className="w-full bg-[#c89d7c] hover:bg-[#b08766] disabled:bg-stone-800 disabled:text-stone-500 text-black font-black py-3 rounded-xl text-xs uppercase tracking-wider transition-all mt-2 cursor-pointer shadow-lg flex items-center justify-center gap-1.5"
+                  className="w-full bg-[#22683e] hover:bg-[#1a5230] disabled:bg-stone-800 disabled:text-stone-500 text-white font-black py-3 rounded-xl text-xs uppercase tracking-wider transition-all mt-2 cursor-pointer shadow-lg flex items-center justify-center gap-1.5"
                 >
                   {sendingOtp ? (
                     <>
@@ -409,7 +414,7 @@ export default function RaffleWheel({ loyalty, authUser, onOpenLogin, onSignupSu
                       placeholder="Enter 6-digit OTP"
                       value={otpCode}
                       onChange={(e) => setOtpCode(e.target.value)}
-                      className="w-full bg-[#171311] border border-[#231b18] rounded-xl pl-9 pr-3 py-2.5 text-xs text-white text-center font-mono tracking-widest text-lg focus:outline-none focus:border-[#c89d7c] transition-all"
+                      className="w-full bg-[#132c1e] border border-[#1d432d] rounded-xl pl-9 pr-3 py-2.5 text-xs text-white text-center font-mono tracking-widest text-lg focus:outline-none focus:border-[#38a15b] transition-all"
                     />
                     <ShieldCheck size={14} className="absolute left-3 top-3.5 text-stone-600" />
                   </div>
@@ -424,7 +429,7 @@ export default function RaffleWheel({ loyalty, authUser, onOpenLogin, onSignupSu
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="w-full bg-[#c89d7c] hover:bg-[#b08766] disabled:bg-stone-800 disabled:text-stone-500 text-black font-black py-3 rounded-xl text-xs uppercase tracking-wider transition-all mt-1 cursor-pointer shadow-lg flex items-center justify-center gap-1.5"
+                  className="w-full bg-[#22683e] hover:bg-[#1a5230] disabled:bg-stone-800 disabled:text-stone-500 text-white font-black py-3 rounded-xl text-xs uppercase tracking-wider transition-all mt-1 cursor-pointer shadow-lg flex items-center justify-center gap-1.5"
                 >
                   {submitting ? (
                     <>
@@ -465,7 +470,7 @@ export default function RaffleWheel({ loyalty, authUser, onOpenLogin, onSignupSu
             <div className="md:col-span-7 flex flex-col items-center justify-center py-6">
               
               {/* Wheel Container with Needle at Top */}
-              <div className="relative w-72 h-72 md:w-80 md:h-80 rounded-full border-4 border-[#2c221e] bg-[#120f0e] shadow-2xl p-1 flex items-center justify-center">
+              <div className="relative w-72 h-72 md:w-80 md:h-80 rounded-full border-4 border-[#1d432d] bg-[#0a1810] shadow-2xl p-1 flex items-center justify-center">
                 
                 {/* Needle Indicator */}
                 <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-20 w-0 h-0 border-l-[12px] border-l-transparent border-r-[12px] border-r-transparent border-t-[20px] border-t-red-500 filter drop-shadow-lg">
@@ -503,7 +508,7 @@ export default function RaffleWheel({ loyalty, authUser, onOpenLogin, onSignupSu
                           {/* Colorful sector slice */}
                           <div
                             className={`absolute inset-0 origin-center ${
-                              idx % 2 === 0 ? "bg-[#c89d7c]" : "bg-[#1f1715]"
+                              idx % 2 === 0 ? "bg-[#22683e]" : "bg-[#102418]"
                             }`}
                             style={{
                               transform: `rotate(${angle}deg)`,
@@ -513,13 +518,13 @@ export default function RaffleWheel({ loyalty, authUser, onOpenLogin, onSignupSu
                           {/* Text Inside Segment */}
                           <div
                             className={`absolute top-[15%] left-[60%] origin-center -translate-x-1/2 text-left select-none text-[8px] md:text-[9px] leading-tight font-black font-mono w-28 ${
-                              idx % 2 === 0 ? "text-black" : "text-stone-300"
+                              idx % 2 === 0 ? "text-white" : "text-stone-300"
                             }`}
                             style={{
                               transform: `rotate(${angle / 2}deg)`,
                             }}
                           >
-                            <span className="block border-b border-black/10 pb-0.5 mb-0.5 truncate">
+                            <span className="block border-b border-white/20 pb-0.5 mb-0.5 truncate">
                               {prize.name.split(" ")[0]}
                             </span>
                             <span className="opacity-70 text-[7px] font-normal block font-sans truncate">
@@ -532,7 +537,7 @@ export default function RaffleWheel({ loyalty, authUser, onOpenLogin, onSignupSu
                   })()}
 
                   {/* Aesthetic Inner Wheel Circle */}
-                  <div className="absolute inset-0 m-auto w-20 h-20 rounded-full bg-[#120f0e] border-2 border-[#c89d7c] flex flex-col items-center justify-center shadow-lg z-10 text-center">
+                  <div className="absolute inset-0 m-auto w-20 h-20 rounded-full bg-[#0a1810] border-2 border-[#22683e] flex flex-col items-center justify-center shadow-lg z-10 text-center">
                     <span className="text-base select-none">🇪🇹</span>
                     <span className="text-[7px] font-mono font-bold tracking-widest text-stone-400">BUNA</span>
                   </div>
@@ -545,14 +550,14 @@ export default function RaffleWheel({ loyalty, authUser, onOpenLogin, onSignupSu
                   <button
                     onClick={handleSpinWheel}
                     disabled={spinning}
-                    className="w-full bg-[#c89d7c] hover:bg-[#b08766] disabled:bg-stone-800 disabled:text-stone-500 text-black font-black py-3 rounded-xl text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xl animate-pulse"
+                    className="w-full bg-[#22683e] hover:bg-[#1a5230] disabled:bg-stone-800 disabled:text-stone-500 text-white font-black py-3 rounded-xl text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xl animate-pulse"
                   >
                     <RefreshCw size={12} className={spinning ? "animate-spin" : ""} />
                     {spinning ? "Spinning..." : "🔮 Spin Your Wheel!"}
                   </button>
                 ) : (
-                  <div className="text-center py-2.5 px-4 rounded-xl bg-[#221a17] border border-[#c89d7c]/20 text-xs font-mono text-stone-400 flex items-center justify-center gap-1.5">
-                    <Lock size={12} className="text-[#c89d7c]" />
+                  <div className="text-center py-2.5 px-4 rounded-xl bg-[#0a1810] border border-[#22683e]/30 text-xs font-mono text-stone-400 flex items-center justify-center gap-1.5">
+                    <Lock size={12} className="text-[#38a15b]" />
                     <span>First-Time Spin Used (1 max per account)</span>
                   </div>
                 )}
@@ -560,20 +565,20 @@ export default function RaffleWheel({ loyalty, authUser, onOpenLogin, onSignupSu
             </div>
 
             {/* Side Status Panel */}
-            <div className="md:col-span-5 bg-[#120f0e] p-6 rounded-2xl border border-[#241c19] self-stretch flex flex-col justify-between">
+            <div className="md:col-span-5 bg-[#0a1810] p-6 rounded-2xl border border-[#1d432d] self-stretch flex flex-col justify-between">
               <div>
                 <span className="text-[9px] font-mono text-stone-500 uppercase tracking-widest block mb-1">
                   Active Logged-In Account
                 </span>
-                <p className="text-sm font-bold text-[#c89d7c]">{authUser?.name || loyalty.customerName || "Member"}</p>
+                <p className="text-sm font-bold text-[#38a15b]">{authUser?.name || loyalty.customerName || "Member"}</p>
                 <p className="text-xs text-stone-400 font-mono mt-0.5">{authUser?.email || loyalty.customerEmail}</p>
 
-                <div className="border-t border-[#231b18] my-4 pt-4">
+                <div className="border-t border-[#1d432d] my-4 pt-4">
                   <h4 className="text-xs font-bold text-white uppercase tracking-wider mb-2">Raffle Status</h4>
                   
                   {!loyalty.hasSpunWheel ? (
                     <div className="flex items-start gap-2.5 text-stone-400 text-xs">
-                      <div className="bg-[#c89d7c]/10 text-[#c89d7c] h-5 w-5 rounded-md flex items-center justify-center shrink-0 text-[10px] font-bold font-mono">1</div>
+                      <div className="bg-[#22683e]/20 text-[#38a15b] h-5 w-5 rounded-md flex items-center justify-center shrink-0 text-[10px] font-bold font-mono">1</div>
                       <p className="leading-snug">Click <strong>Spin Your Wheel!</strong> on the left to determine which authentic premium specialty cup is yours for free.</p>
                     </div>
                   ) : (
@@ -582,8 +587,8 @@ export default function RaffleWheel({ loyalty, authUser, onOpenLogin, onSignupSu
                       {/* Sub-State: Spun, but has NOT collected prize yet */}
                       {!loyalty.hasCollectedPrize ? (
                         <div className="flex flex-col gap-3">
-                          <div className="bg-[#c89d7c]/10 border border-[#c89d7c]/30 text-[#c89d7c] px-3.5 py-3 rounded-xl text-xs flex flex-col gap-1.5">
-                            <span className="text-[10px] font-mono uppercase font-bold tracking-wider text-[#c89d7c] block">🎯 Spin Result</span>
+                          <div className="bg-[#22683e]/20 border border-[#22683e]/40 text-[#38a15b] px-3.5 py-3 rounded-xl text-xs flex flex-col gap-1.5">
+                            <span className="text-[10px] font-mono uppercase font-bold tracking-wider text-[#38a15b] block">🎯 Spin Result</span>
                             <p className="font-sans italic font-bold text-white text-sm">
                               "{loyalty.rafflePrize}"
                             </p>
@@ -620,9 +625,9 @@ export default function RaffleWheel({ loyalty, authUser, onOpenLogin, onSignupSu
                             </p>
                           </div>
 
-                          <div className="bg-[#191412] p-3 rounded-xl border border-[#231b18] text-center">
-                            <span className="text-[9px] font-mono text-stone-500 block uppercase">Your Welcome Coupon Code</span>
-                            <span className="text-sm font-mono font-black text-[#c89d7c] tracking-widest mt-0.5 inline-block uppercase bg-black/40 px-3 py-1 rounded">
+                          <div className="bg-[#12281b] p-3 rounded-xl border border-[#1d432d] text-center">
+                            <span className="text-[9px] font-mono text-stone-400 block uppercase">Your Welcome Coupon Code</span>
+                            <span className="text-sm font-mono font-black text-[#38a15b] tracking-widest mt-0.5 inline-block uppercase bg-black/40 px-3 py-1 rounded">
                               BUNA-WELCOME-{loyalty.customerName?.split(" ")[0].toUpperCase() || "SPIN"}
                             </span>
                           </div>
@@ -633,7 +638,7 @@ export default function RaffleWheel({ loyalty, authUser, onOpenLogin, onSignupSu
                 </div>
               </div>
 
-              <div className="text-[10px] text-stone-500 leading-relaxed pt-4 border-t border-[#231b18] mt-4 font-mono">
+              <div className="text-[10px] text-stone-500 leading-relaxed pt-4 border-t border-[#1d432d] mt-4 font-mono">
                 ℹ️ To respect fair-use terms, our server permits exactly one (1) registration and spin per physical client node. Thank you for joining Buna!
               </div>
             </div>

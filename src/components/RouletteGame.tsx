@@ -67,10 +67,10 @@ export default function RouletteGame({ loyalty, onBeanRolled }: {
     <div id="gamified-lounge" className="grid grid-cols-1 lg:grid-cols-12 gap-8">
       
       {/* SECTION A: COFFEE ROULETTE (Feeling Lucky) */}
-      <div className="lg:col-span-6 bg-[#1a1513] p-6 rounded-2xl border border-[#2c221e] flex flex-col justify-between min-h-[380px]">
+      <div className="lg:col-span-6 bg-[#102418] p-6 rounded-2xl border border-[#1d432d] flex flex-col justify-between min-h-[380px]">
         <div>
           <div className="flex items-center gap-2 mb-1">
-            <span className="text-xs font-mono px-2 py-0.5 rounded-full bg-[#c89d7c]/10 text-[#c89d7c] border border-[#c89d7c]/20 flex items-center gap-1">
+            <span className="text-xs font-mono px-2 py-0.5 rounded-full bg-[#22683e]/20 text-[#38a15b] border border-[#22683e]/30 flex items-center gap-1">
               <Gift size={10} /> GAMIFICATION
             </span>
             <span className="text-xs text-stone-500 font-mono">Taste Discovery</span>
@@ -96,15 +96,15 @@ export default function RouletteGame({ loyalty, onBeanRolled }: {
                 key="result"
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
-                className="text-center bg-[#120f0e] p-4 rounded-xl border border-[#c89d7c]/20 max-w-sm w-full"
+                className="text-center bg-[#0a1810] p-4 rounded-xl border border-[#22683e]/30 max-w-sm w-full"
               >
-                <span className="text-xs font-mono text-[#c89d7c] uppercase">Your Lucky Pairing</span>
+                <span className="text-xs font-mono text-[#38a15b] uppercase">Your Lucky Pairing</span>
                 <p className="text-sm font-bold text-white mt-1">{rouletteResult.drink}</p>
                 <p className="text-xs text-stone-400 mt-0.5">+ {rouletteResult.extra}</p>
                 
-                <div className="mt-3.5 pt-3.5 border-t border-dashed border-[#241c19] text-xs">
+                <div className="mt-3.5 pt-3.5 border-t border-dashed border-[#1d432d] text-xs">
                   <p className="text-[#82ca9d] font-bold">🎁 Reward: {rouletteResult.discount}</p>
-                  <p className="text-[10px] text-stone-500 mt-1 font-mono uppercase bg-[#181412] px-2.5 py-1 rounded inline-block">
+                  <p className="text-[10px] text-stone-400 mt-1 font-mono uppercase bg-[#12281b] px-2.5 py-1 rounded inline-block">
                     PROMO CODE: {rouletteResult.code}
                   </p>
                 </div>
@@ -120,7 +120,7 @@ export default function RouletteGame({ loyalty, onBeanRolled }: {
         <button
           onClick={handleSpinRoulette}
           disabled={spinning}
-          className="w-full bg-[#c89d7c] hover:bg-[#b08766] disabled:bg-stone-800 disabled:text-stone-500 text-[#120f0e] font-black py-3 px-4 rounded-xl text-xs transition-all flex items-center justify-center gap-1.5"
+          className="w-full bg-[#22683e] hover:bg-[#1a5230] disabled:bg-stone-800 disabled:text-stone-500 text-white font-black py-3 px-4 rounded-xl text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-lg"
         >
           <Play size={12} className="fill-current" />
           {spinning ? "Spinning Wheel..." : "🎯 I'm Feeling Lucky"}
@@ -128,10 +128,10 @@ export default function RouletteGame({ loyalty, onBeanRolled }: {
       </div>
 
       {/* SECTION B: LUCKY BEAN CRACKER GAME */}
-      <div className="lg:col-span-6 bg-[#1a1513] p-6 rounded-2xl border border-[#2c221e] flex flex-col justify-between min-h-[380px]">
+      <div className="lg:col-span-6 bg-[#102418] p-6 rounded-2xl border border-[#1d432d] flex flex-col justify-between min-h-[380px]">
         <div>
           <div className="flex items-center gap-2 mb-1">
-            <span className="text-xs font-mono px-2 py-0.5 rounded-full bg-[#c89d7c]/10 text-[#c89d7c] border border-[#c89d7c]/20 flex items-center gap-1">
+            <span className="text-xs font-mono px-2 py-0.5 rounded-full bg-[#22683e]/20 text-[#38a15b] border border-[#22683e]/30 flex items-center gap-1">
               <Sparkles size={10} /> REWARDS
             </span>
             <span className="text-xs text-stone-500 font-mono">Bean Cracker</span>
@@ -157,13 +157,13 @@ export default function RouletteGame({ loyalty, onBeanRolled }: {
                 key="cracked"
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="text-center bg-[#120f0e] p-4 rounded-xl border border-emerald-900/30 max-w-sm w-full"
+                className="text-center bg-[#0a1810] p-4 rounded-xl border border-emerald-900/30 max-w-sm w-full"
               >
                 <span className="text-[10px] font-mono text-[#82ca9d] uppercase bg-emerald-950/40 border border-emerald-900/30 px-2 py-0.5 rounded">
                   CRACKED BEAN PRIZE!
                 </span>
                 <p className="text-lg font-black text-white mt-3">{crackedPrize.title}</p>
-                <p className="text-[10px] text-stone-500 mt-1 font-mono uppercase bg-[#181412] px-2.5 py-1 rounded inline-block">
+                <p className="text-[10px] text-stone-400 mt-1 font-mono uppercase bg-[#12281b] px-2.5 py-1 rounded inline-block">
                   USE CODE: {crackedPrize.code}
                 </p>
                 <p className="text-[10px] text-stone-400 mt-2">Points have been added automatically to your card.</p>
@@ -172,7 +172,7 @@ export default function RouletteGame({ loyalty, onBeanRolled }: {
               <div className="flex flex-col items-center gap-2 text-center">
                 <span className="text-5xl animate-bounce select-none">🫘</span>
                 <p className="text-xs font-mono text-stone-300 font-bold">
-                  You have <span className="text-[#c89d7c] text-sm">{loyalty.beansCount}</span> Virtual Coffee Bean{loyalty.beansCount !== 1 && "s"}
+                  You have <span className="text-[#38a15b] text-sm">{loyalty.beansCount}</span> Virtual Coffee Bean{loyalty.beansCount !== 1 && "s"}
                 </p>
                 <p className="text-[10px] text-stone-500 max-w-xs">Beans are earned by ordering coffees or completing community tasks.</p>
               </div>
@@ -183,10 +183,10 @@ export default function RouletteGame({ loyalty, onBeanRolled }: {
         <button
           onClick={handleCrackBean}
           disabled={loyalty.beansCount <= 0 || cracking}
-          className="w-full bg-[#c89d7c] hover:bg-[#b08766] disabled:bg-stone-800 disabled:text-stone-500 text-[#120f0e] font-black py-3 px-4 rounded-xl text-xs transition-all flex items-center justify-center gap-1.5"
+          className="w-full bg-[#22683e] hover:bg-[#1a5230] disabled:bg-stone-800 disabled:text-stone-500 text-white font-black py-3 px-4 rounded-xl text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-lg"
         >
           <span>🔨 Crack Open Virtual Bean</span>
-          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-black/15 text-black">
+          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-black/25 text-white">
             {loyalty.beansCount} Left
           </span>
         </button>

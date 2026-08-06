@@ -1,6 +1,6 @@
 {
-  "name": "Buna AI - Premium Coffee Experience",
-  "description": "An interactive full-stack Ethiopian coffee discovery platform, featuring an AI personality quiz, custom drink builder, digital coffee passport, lucky bean gamification, virtual coffee ceremony, and an owner analytics dashboard.",
+  "name": "Buna - Premium Coffee Experience",
+  "description": "An interactive full-stack Ethiopian coffee discovery platform, featuring a custom drink builder, digital coffee passport, lucky bean gamification, virtual coffee ceremony, and an owner analytics dashboard.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

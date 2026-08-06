@@ -43,10 +43,20 @@ export default function OwnerDashboard() {
   const [editingPromo, setEditingPromo] = useState<any | null>(null);
   const [editingRafflePrize, setEditingRafflePrize] = useState<any | null>(null);
 
+  const getAdminHeaders = () => {
+    const token = localStorage.getItem("buna_admin_token") || "";
+    const pin = localStorage.getItem("buna_admin_pin") || "2026";
+    return {
+      "Content-Type": "application/json",
+      "X-Admin-Token": token,
+      "X-Admin-PIN": pin
+    };
+  };
+
   const loadOwnerData = () => {
     setLoading(true);
     // Fetch stats
-    const fetchStats = fetch("/api/owner/stats")
+    const fetchStats = fetch("/api/owner/stats", { headers: getAdminHeaders() })
       .then(res => res.json())
       .then(data => {
         setStats(data);
@@ -62,7 +72,7 @@ export default function OwnerDashboard() {
       .catch(e => console.error("Error fetching menu:", e));
 
     // Fetch raffle registered users
-    const fetchUsers = fetch("/api/owner/users")
+    const fetchUsers = fetch("/api/owner/users", { headers: getAdminHeaders() })
       .then(res => res.json())
       .then(data => {
         if (data.success) {
@@ -349,7 +359,7 @@ export default function OwnerDashboard() {
   ];
 
   return (
-    <div id="owner-dashboard" className="bg-[#1a1513] p-6 rounded-2xl border border-[#2c221e] flex flex-col gap-6">
+    <div id="owner-dashboard" className="bg-[#1a3e29] p-6 rounded-2xl border border-[#295a3d] flex flex-col gap-6">
       
       {/* Top Title Row */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-[#241c19] pb-5">

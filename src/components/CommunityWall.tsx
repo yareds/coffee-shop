@@ -81,22 +81,22 @@ export default function CommunityWall({ onPostAdded }: { onPostAdded: (points: n
   };
 
   return (
-    <div id="community-wall" className="bg-[#1a1513] p-6 rounded-2xl border border-[#2c221e] flex flex-col gap-6">
+    <div id="community-wall" className="bg-[#1a3e29] p-6 rounded-2xl border border-[#295a3d] flex flex-col gap-6">
       
       {/* Header section */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <div className="flex items-center gap-2 mb-1">
-            <span className="text-xs font-mono px-2 py-0.5 rounded-full bg-[#c89d7c]/10 text-[#c89d7c] border border-[#c89d7c]/20">COMMUNITY</span>
-            <span className="text-xs text-stone-500 font-mono">Buna Social Wall</span>
+            <span className="text-xs font-mono px-2 py-0.5 rounded-full bg-[#2d824d]/20 text-[#42bd6c] border border-[#2d824d]/40">COMMUNITY</span>
+            <span className="text-xs text-stone-300 font-mono">Buna Social Wall</span>
           </div>
           <h3 className="text-xl font-bold text-white tracking-tight">The Community Coffee Wall</h3>
-          <p className="text-xs text-stone-400 mt-0.5">Share your latte art, roast stories, or review our craft. Every post earns you 15 loyalty points!</p>
+          <p className="text-xs text-stone-300 mt-0.5">Share your latte art, roast stories, or review our craft. Every post earns you 15 loyalty points!</p>
         </div>
 
         <button
           onClick={() => setShowForm(!showForm)}
-          className="flex items-center gap-1 px-4 py-2 bg-[#c89d7c] hover:bg-[#b08766] text-black text-xs font-black rounded-xl transition-all"
+          className="flex items-center gap-1 px-4 py-2 bg-[#2d824d] hover:bg-[#226a3f] text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-emerald-950/20"
         >
           {showForm ? "Cancel Post" : "✍ Post a Coffee Review"}
         </button>
@@ -110,26 +110,26 @@ export default function CommunityWall({ onPostAdded }: { onPostAdded: (points: n
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: "auto" }}
             exit={{ opacity: 0, height: 0 }}
-            className="bg-[#120f0e] p-5 rounded-xl border border-[#c89d7c]/20 flex flex-col gap-4 text-xs"
+            className="bg-[#122b1c] p-5 rounded-xl border border-[#295a3d] flex flex-col gap-4 text-xs"
           >
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="flex flex-col gap-1">
-                <label className="text-stone-400 font-medium">Your Name</label>
+                <label className="text-stone-300 font-medium">Your Name</label>
                 <input
                   type="text"
                   placeholder="e.g. Abebe K."
                   value={author}
                   onChange={(e) => setAuthor(e.target.value)}
-                  className="bg-stone-900 border border-stone-800 rounded-lg px-3 py-2 text-stone-200"
+                  className="bg-[#224e38] border border-[#295a3d] rounded-lg px-3 py-2 text-stone-200 focus:outline-none focus:border-[#42bd6c]"
                 />
               </div>
 
               <div className="flex flex-col gap-1">
-                <label className="text-stone-400 font-medium">Post Category</label>
+                <label className="text-stone-300 font-medium">Post Category</label>
                 <select
                   value={category}
                   onChange={(e) => setCategory(e.target.value as any)}
-                  className="bg-stone-900 border border-stone-800 rounded-lg px-3 py-2 text-stone-200"
+                  className="bg-[#224e38] border border-[#295a3d] rounded-lg px-3 py-2 text-stone-200 focus:outline-none focus:border-[#42bd6c]"
                 >
                   <option value="review">Coffee Tasting Review</option>
                   <option value="latte-art">Latte Art Photo</option>
@@ -141,15 +141,15 @@ export default function CommunityWall({ onPostAdded }: { onPostAdded: (points: n
 
             {/* Custom Multi-Criteria Rating (Taste, Presentation, Barista, cleanliness) */}
             {category === "review" && (
-              <div className="bg-[#181412] p-4 rounded-xl border border-[#241c19]">
-                <p className="text-xs font-bold font-mono text-[#c89d7c] mb-3 uppercase tracking-wider">Detailed Cafe Ratings</p>
+              <div className="bg-[#224e38] p-4 rounded-xl border border-[#295a3d]">
+                <p className="text-xs font-bold font-mono text-[#42bd6c] mb-3 uppercase tracking-wider">Detailed Cafe Ratings</p>
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                   {Object.keys(ratings).map((key) => {
                     const label = key.charAt(0).toUpperCase() + key.slice(1);
                     const currentRating = ratings[key as keyof typeof ratings];
                     return (
-                      <div key={key} className="flex flex-col gap-1 bg-[#120f0e] p-2 rounded border border-stone-800">
-                        <span className="text-[10px] text-stone-500 font-mono">{label}</span>
+                      <div key={key} className="flex flex-col gap-1 bg-[#122b1c] p-2 rounded border border-[#295a3d]">
+                        <span className="text-[10px] text-stone-300 font-mono">{label}</span>
                         <div className="flex gap-1">
                           {[1, 2, 3, 4, 5].map((star) => (
                             <button
@@ -170,30 +170,30 @@ export default function CommunityWall({ onPostAdded }: { onPostAdded: (points: n
             )}
 
             <div className="flex flex-col gap-1">
-              <label className="text-stone-400 font-medium">Tasting Notes & Review Content</label>
+              <label className="text-stone-300 font-medium">Tasting Notes & Review Content</label>
               <textarea
                 required
                 placeholder="What was special about your cup? Let us know..."
                 value={newPostText}
                 onChange={(e) => setNewPostText(e.target.value)}
-                className="bg-stone-900 border border-stone-800 rounded-lg px-3 py-2 text-stone-200 h-20 resize-none"
+                className="bg-[#224e38] border border-[#295a3d] rounded-lg px-3 py-2 text-stone-200 h-20 resize-none focus:outline-none focus:border-[#42bd6c]"
               />
             </div>
 
             <div className="flex flex-col gap-1">
-              <label className="text-stone-400 font-medium">Photo URL (optional)</label>
+              <label className="text-stone-300 font-medium">Photo URL (optional)</label>
               <input
                 type="text"
                 placeholder="Paste an image URL, or try: https://images.unsplash.com/photo-1541167760496-1628856ab772?w=500"
                 value={imageUrl}
                 onChange={(e) => setImageUrl(e.target.value)}
-                className="bg-stone-900 border border-stone-800 rounded-lg px-3 py-2 text-stone-200 font-mono"
+                className="bg-[#224e38] border border-[#295a3d] rounded-lg px-3 py-2 text-stone-200 font-mono focus:outline-none focus:border-[#42bd6c]"
               />
             </div>
 
             <button
               type="submit"
-              className="w-full bg-[#c89d7c] hover:bg-[#b08766] text-black font-bold py-2.5 rounded-lg text-xs transition-all"
+              className="w-full bg-[#2d824d] hover:bg-[#226a3f] text-white font-bold py-2.5 rounded-lg text-xs transition-all shadow-md shadow-emerald-950/20"
             >
               ✓ Publish Review to Wall (+15 Points)
             </button>
@@ -204,24 +204,24 @@ export default function CommunityWall({ onPostAdded }: { onPostAdded: (points: n
       {/* Grid of Posts */}
       {loading ? (
         <div className="py-12 flex justify-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-[#c89d7c]"></div>
+          <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-[#42bd6c]"></div>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {posts.map((post) => (
-            <div key={post.id} className="bg-[#120f0e] rounded-xl p-4 border border-[#241c19] flex flex-col justify-between">
+            <div key={post.id} className="bg-[#122b1c] rounded-xl p-4 border border-[#295a3d] flex flex-col justify-between">
               
               {/* Post Author Card */}
               <div>
                 <div className="flex justify-between items-start mb-3">
                   <div className="flex items-center gap-2.5">
-                    <img src={post.avatar} className="h-8 w-8 rounded-full object-cover border border-stone-700" alt="" />
+                    <img src={post.avatar} className="h-8 w-8 rounded-full object-cover border border-[#295a3d]" alt={`${post.author}'s avatar`} />
                     <div>
                       <h5 className="text-xs font-bold text-white">{post.author}</h5>
-                      <span className="text-[9px] font-mono text-stone-500">{post.date}</span>
+                      <span className="text-[9px] font-mono text-stone-300">{post.date}</span>
                     </div>
                   </div>
-                  <span className="text-[9px] font-mono text-[#c89d7c] bg-[#c89d7c]/10 border border-[#c89d7c]/20 px-2 py-0.5 rounded-full uppercase">
+                  <span className="text-[9px] font-mono text-[#42bd6c] bg-[#2d824d]/20 border border-[#2d824d]/40 px-2 py-0.5 rounded-full uppercase">
                     {post.category}
                   </span>
                 </div>
@@ -236,26 +236,26 @@ export default function CommunityWall({ onPostAdded }: { onPostAdded: (points: n
                 )}
 
                 {/* Main Text */}
-                <p className="text-xs text-stone-300 leading-relaxed mb-3">
+                <p className="text-xs text-stone-200 leading-relaxed mb-3">
                   "{post.text}"
                 </p>
 
                 {/* Optional Attached Photo */}
                 {post.image && (
-                  <img src={post.image} className="w-full h-40 object-cover rounded-lg border border-stone-800 mb-3" alt="" />
+                  <img src={post.image} className="w-full h-40 object-cover rounded-lg border border-[#295a3d] mb-3" alt={`Community post media shared by ${post.author}`} />
                 )}
               </div>
 
               {/* Interaction Row */}
-              <div className="flex justify-between items-center pt-2.5 border-t border-[#1e1715] mt-1 text-[11px] font-mono text-stone-500">
+              <div className="flex justify-between items-center pt-2.5 border-t border-[#295a3d] mt-1 text-[11px] font-mono text-stone-300">
                 <button
                   onClick={() => handleLike(post.id)}
-                  className="flex items-center gap-1.5 hover:text-red-400 transition-all cursor-pointer"
+                  className="flex items-center gap-1.5 hover:text-emerald-400 transition-all cursor-pointer"
                 >
-                  <Heart size={12} className="fill-current text-stone-600 hover:text-red-400" />
+                  <Heart size={12} className="fill-current text-stone-400 hover:text-emerald-400" />
                   <span>{post.likes} Likes</span>
                 </button>
-                <span className="text-[10px]">Verified Visit ✓</span>
+                <span className="text-[10px] text-[#42bd6c]">Verified Visit ✓</span>
               </div>
 
             </div>

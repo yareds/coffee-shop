@@ -47,6 +47,7 @@ export interface PassportRegion {
   history: string;
   drinks: string[];
   badgeName: string;
+  image?: string;
 }
 
 export interface LoyaltyProfile {
@@ -74,3 +75,25 @@ export interface AuthUser {
   email?: string;
   phone?: string;
 }
+
+export interface CartItem {
+  id: string;
+  menuItem?: MenuItem;
+  name: string;
+  price: number;
+  quantity: number;
+  details?: string;
+}
+
+export interface Order {
+  id: string;
+  customerName: string;
+  customerEmail: string;
+  deviceId: string;
+  items: CartItem[];
+  totalPrice: number;
+  status: 'Received' | 'Brewing' | 'Ready' | 'Completed';
+  createdAt: string;
+  isCustomBrew?: boolean;
+}
+
