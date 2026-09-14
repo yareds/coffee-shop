@@ -2,6 +2,8 @@ import React, { useState, useEffect } from "react";
 import { MessageSquare, Sparkles, Heart, Image as ImageIcon, Send, Star, HelpCircle } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { WallPost } from "../types";
+import { db, handleFirestoreError, OperationType, auth } from "../lib/firebase";
+import { collection, onSnapshot, query, orderBy, addDoc, updateDoc, doc, increment } from "firebase/firestore";
 
 export default function CommunityWall({ onPostAdded }: { onPostAdded: (points: number, reason: string) => void }) {
   const [posts, setPosts] = useState<WallPost[]>([]);
@@ -24,60 +26,126 @@ export default function CommunityWall({ onPostAdded }: { onPostAdded: (points: n
   const [imageUrl, setImageUrl] = useState("");
   const [showForm, setShowForm] = useState(false);
 
-  const loadWallPosts = () => {
-    setLoading(true);
-    fetch("/api/wall")
-      .then(res => res.json())
-      .then(data => {
-        setPosts(data);
-        setLoading(false);
-      })
-      .catch(e => {
-        console.error(e);
-        setLoading(false);
-      });
-  };
-
   useEffect(() => {
-    loadWallPosts();
+    const postsRef = collection(db, "community_posts");
+    const q = query(postsRef, orderBy("createdAt", "desc"));
+
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        if (!snapshot.empty) {
+          const loadedPosts: WallPost[] = snapshot.docs.map((docSnap) => {
+            const data = docSnap.data();
+            return {
+              id: docSnap.id,
+              author: data.author || "Anonymous",
+              avatar: data.avatar || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100",
+              text: data.text || "",
+              date: data.date || "Just now",
+              category: data.category || "review",
+              likes: data.likes || 0,
+              rating: data.rating || 5,
+              image: data.image || undefined
+            };
+          });
+          setPosts(loadedPosts);
+          setLoading(false);
+        } else {
+          // Fallback to Express API if Firestore collection empty
+          fetch("/api/wall")
+            .then(res => res.json())
+            .then(data => {
+              setPosts(data);
+              setLoading(false);
+            })
+            .catch(e => {
+              console.error(e);
+              setLoading(false);
+            });
+        }
+      },
+      (error) => {
+        console.warn("Firestore snapshot error, falling back to server route:", error);
+        handleFirestoreError(error, OperationType.GET, "community_posts");
+        fetch("/api/wall")
+          .then(res => res.json())
+          .then(data => {
+            setPosts(data);
+            setLoading(false);
+          })
+          .catch(() => setLoading(false));
+      }
+    );
+
+    return () => unsubscribe();
   }, []);
 
-  const handlePostSubmit = (e: React.FormEvent) => {
+  const handlePostSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newPostText.trim()) return;
 
-    const payload = {
-      author: author.trim() || "Anonymous Coffee Lover",
-      text: newPostText,
-      rating: category === "review" ? rating : undefined,
-      image: imageUrl.trim() || undefined,
-      category
-    };
+    const authorName = author.trim() || auth.currentUser?.displayName || "Anonymous Coffee Lover";
 
-    fetch("/api/wall", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
-    })
-      .then(res => res.json())
-      .then(data => {
-        if (data.success) {
-          setPosts(data.wallPosts);
-          setNewPostText("");
-          setAuthor("");
-          setImageUrl("");
-          setShowForm(false);
-          // Reward points
-          onPostAdded(15, "Contributed to Community Wall");
-        }
+    try {
+      await addDoc(collection(db, "community_posts"), {
+        author: authorName,
+        authorUid: auth.currentUser?.uid || "guest",
+        text: newPostText,
+        rating: category === "review" ? rating : null,
+        image: imageUrl.trim() || null,
+        category,
+        likes: 0,
+        avatar: auth.currentUser?.photoURL || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100",
+        date: "Just now",
+        createdAt: new Date().toISOString()
+      });
+
+      setNewPostText("");
+      setAuthor("");
+      setImageUrl("");
+      setShowForm(false);
+      onPostAdded(15, "Contributed to Community Wall");
+    } catch (err) {
+      console.warn("Firestore post creation failed, trying server API fallback...", err);
+      // Fallback
+      fetch("/api/wall", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          author: authorName,
+          text: newPostText,
+          rating: category === "review" ? rating : undefined,
+          image: imageUrl.trim() || undefined,
+          category
+        })
       })
-      .catch(e => console.error(e));
+        .then(res => res.json())
+        .then(data => {
+          if (data.success) {
+            setPosts(data.wallPosts);
+            setNewPostText("");
+            setAuthor("");
+            setImageUrl("");
+            setShowForm(false);
+            onPostAdded(15, "Contributed to Community Wall");
+          }
+        })
+        .catch(e => console.error(e));
+    }
   };
 
-  const handleLike = (id: string) => {
+  const handleLike = async (id: string) => {
     setPosts(prev =>
       prev.map(p => (p.id === id ? { ...p, likes: p.likes + 1 } : p))
     );
+    try {
+      const postRef = doc(db, "community_posts", id);
+      await updateDoc(postRef, {
+        likes: increment(1)
+      });
+    } catch (err) {
+      // Local optimistic state already updated
+    }
   };
 
   return (

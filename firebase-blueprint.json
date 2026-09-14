@@ -1,0 +1,85 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile with loyalty points, stamps, and beans",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 100 },
+        "email": { "type": "string", "maxLength": 200 },
+        "role": { "type": "string", "enum": ["user", "admin"] },
+        "points": { "type": "number" },
+        "stampsCount": { "type": "number" },
+        "beansCount": { "type": "number" },
+        "stampedRegions": { "type": "array" }
+      },
+      "required": ["uid", "email", "points"]
+    },
+    "CommunityPost": {
+      "title": "Community Post",
+      "description": "Coffee wall reviews and posts shared by community members",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "author": { "type": "string", "maxLength": 100 },
+        "authorUid": { "type": "string", "maxLength": 128 },
+        "text": { "type": "string", "maxLength": 1000 },
+        "category": { "type": "string", "enum": ["review", "latte-art", "roast-story", "general"] },
+        "likes": { "type": "number" },
+        "likedBy": { "type": "array" },
+        "createdAt": { "type": "string" },
+        "image": { "type": "string", "maxLength": 500 }
+      },
+      "required": ["author", "text", "category"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "Coffee cup orders placed by customers",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "customerName": { "type": "string", "maxLength": 100 },
+        "coffeeName": { "type": "string", "maxLength": 100 },
+        "origin": { "type": "string", "maxLength": 100 },
+        "price": { "type": "number" },
+        "status": { "type": "string", "enum": ["pending", "preparing", "completed", "cancelled"] },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["coffeeName", "origin", "price", "status"]
+    },
+    "Promotion": {
+      "title": "Promotion",
+      "description": "Special offers and cafe promotions",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "title": { "type": "string", "maxLength": 100 },
+        "code": { "type": "string", "maxLength": 50 },
+        "discount": { "type": "string", "maxLength": 50 },
+        "description": { "type": "string", "maxLength": 500 },
+        "active": { "type": "boolean" }
+      },
+      "required": ["title", "code", "discount"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "User profile collection"
+    },
+    "/community_posts/{postId}": {
+      "schema": { "$ref": "#/entities/CommunityPost" },
+      "description": "Public community wall coffee posts"
+    },
+    "/orders/{orderId}": {
+      "schema": { "$ref": "#/entities/Order" },
+      "description": "Customer coffee orders"
+    },
+    "/promotions/{promoId}": {
+      "schema": { "$ref": "#/entities/Promotion" },
+      "description": "Cafe promotions managed by owner"
+    }
+  }
+}

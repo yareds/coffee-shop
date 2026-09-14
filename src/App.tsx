@@ -20,6 +20,8 @@ import LoginModal from "./components/LoginModal";
 import { AnimatedCounter } from "./components/AnimatedCounter";
 import BunaLogo from "./components/BunaLogo";
 import { LoyaltyProfile, AuthUser } from "./types";
+import { auth } from "./lib/firebase";
+import { onAuthStateChanged, signOut as fbSignOut } from "firebase/auth";
 
 // Helper to get or generate client-side unique device ID
 const getDeviceId = () => {
@@ -84,6 +86,22 @@ export default function App() {
   useEffect(() => {
     loadProfileAndPromos(authUser);
   }, [authUser?.email, authUser?.role]);
+
+  // Listen to Firebase Auth state
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (fbUser) => {
+      if (fbUser && authUser.role === 'guest') {
+        const u: AuthUser = {
+          role: 'user',
+          name: fbUser.displayName || fbUser.email?.split('@')[0] || "Coffee Explorer",
+          email: fbUser.email || ""
+        };
+        setAuthUser(u);
+        localStorage.setItem("buna_auth_user", JSON.stringify(u));
+      }
+    });
+    return () => unsubscribe();
+  }, []);
 
   const triggerToast = (msg: string) => {
     setToastMsg(msg);
@@ -171,6 +189,7 @@ export default function App() {
   };
 
   const handleLogout = () => {
+    fbSignOut(auth).catch(() => {});
     const guest: AuthUser = { role: 'guest', name: 'Guest Explorer' };
     setAuthUser(guest);
     localStorage.removeItem("buna_auth_user");
