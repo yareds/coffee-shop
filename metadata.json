@@ -1,6 +1,6 @@
 {
   "name": "Buna - Premium Coffee Experience",
-  "description": "An interactive full-stack Ethiopian coffee discovery platform, featuring a custom drink builder, digital coffee passport, lucky bean gamification, virtual coffee ceremony, and an owner analytics dashboard.",
+  "description": "An interactive full-stack Ethiopian coffee discovery platform, featuring a custom drink builder, digital coffee passport, lucky bean gamification, virtual coffee ceremony, Google Sign-In, and community wall.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

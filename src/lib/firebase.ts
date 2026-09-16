@@ -5,8 +5,12 @@ import firebaseConfig from '../../firebase-applet-config.json';
 
 const app = initializeApp(firebaseConfig);
 
-// CRITICAL: Must pass firebaseConfig.firestoreDatabaseId to getFirestore
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+// The AI-Studio-generated project used a named Firestore database
+// (firestoreDatabaseId). A standard Firebase project created via the
+// console uses '(default)', for which getFirestore(app) without a database ID should be used.
+const rawDatabaseId = (firebaseConfig as { firestoreDatabaseId?: string }).firestoreDatabaseId;
+const namedDatabaseId = rawDatabaseId && rawDatabaseId !== '(default)' ? rawDatabaseId : undefined;
+export const db = namedDatabaseId ? getFirestore(app, namedDatabaseId) : getFirestore(app);
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
 

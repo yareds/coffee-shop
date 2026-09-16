@@ -19,14 +19,50 @@ router.post("/verify-pin", (req, res) => {
       message: "Admin authentication successful.",
       adminUser: {
         role: "admin",
-        name: "Buna Store Admin",
-        email: "admin@bunacoffee.eth"
+        name: "yared.abegaz@gmail.com",
+        email: "yared.abegaz@gmail.com"
       }
     });
   }
 
   res.status(401).json({
     error: "Invalid Admin PIN. (Default PIN is 2026)"
+  });
+});
+
+// Admin Google Auth endpoint
+router.post("/google-auth", (req, res) => {
+  const email = (req.body?.email || "").toString().toLowerCase().trim();
+  const adminEmails = [
+    (process.env.ADMIN_EMAIL || "yared.abegaz@gmail.com").toLowerCase().trim(),
+    "yared.abegaz@gmail.com"
+  ];
+
+  const isAdmin = adminEmails.includes(email);
+  if (isAdmin) {
+    const token = createAdminToken();
+    return res.json({
+      success: true,
+      isAdmin: true,
+      token,
+      message: "Admin authenticated via Google Sign In.",
+      user: {
+        role: "admin",
+        name: "yared.abegaz@gmail.com",
+        email: "yared.abegaz@gmail.com"
+      }
+    });
+  }
+
+  return res.json({
+    success: true,
+    isAdmin: false,
+    message: "User authenticated via Google Sign In.",
+    user: {
+      role: "user",
+      name: req.body?.name || email.split("@")[0] || "Coffee Explorer",
+      email
+    }
   });
 });
 

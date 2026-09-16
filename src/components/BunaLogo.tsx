@@ -13,29 +13,29 @@ export const BunaLogo: React.FC<BunaLogoProps> = ({
   className = "",
   onClick
 }) => {
-  // Sizing mappings
+  // Sizing mappings with mobile optimization
   const iconSizeClass = {
-    sm: "h-8 w-8",
-    md: "h-10 w-10",
-    lg: "h-14 w-14"
+    sm: "h-7 w-7 sm:h-8 sm:w-8",
+    md: "h-8 w-8 sm:h-10 sm:w-10",
+    lg: "h-12 w-12 sm:h-14 sm:w-14"
   }[size];
 
   const titleSizeClass = {
-    sm: "text-lg tracking-[0.2em]",
-    md: "text-2xl tracking-[0.22em]",
-    lg: "text-3xl tracking-[0.25em]"
+    sm: "text-base sm:text-lg tracking-[0.18em]",
+    md: "text-lg sm:text-2xl tracking-[0.18em] sm:tracking-[0.22em]",
+    lg: "text-2xl sm:text-3xl tracking-[0.22em] sm:tracking-[0.25em]"
   }[size];
 
   const badgeSizeClass = {
-    sm: "text-[8px] px-1.5 py-0.2",
-    md: "text-[9px] px-2 py-0.5",
-    lg: "text-[10px] px-2.5 py-1"
+    sm: "text-[7px] sm:text-[8px] px-1 py-0.2",
+    md: "text-[8px] sm:text-[9px] px-1.5 py-0.5 sm:px-2",
+    lg: "text-[9px] sm:text-[10px] px-2 py-0.5 sm:px-2.5 sm:py-1"
   }[size];
 
   return (
     <div 
       onClick={onClick}
-      className={`flex items-center gap-3.5 group cursor-pointer select-none ${className}`}
+      className={`flex items-center gap-2 sm:gap-3.5 group cursor-pointer select-none shrink-0 ${className}`}
     >
       {/* Refined Geometric Emblem / Mark */}
       <div className={`relative ${iconSizeClass} shrink-0 flex items-center justify-center`}>

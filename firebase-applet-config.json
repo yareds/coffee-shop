@@ -1,12 +1,12 @@
 {
-  "projectId": "studio-424851478-89318",
-  "appId": "1:682048999019:web:ade261a1ed5badb687eb2e",
-  "apiKey": "AIzaSyD64yuykgYuuDKxFMzMgdS05dIVt2wQfjc",
-  "authDomain": "studio-424851478-89318.firebaseapp.com",
-  "firestoreDatabaseId": "ai-studio-bunaaipremiumcof-4a662efd-cc62-4ab6-a8ad-cd1f24a9e707",
-  "storageBucket": "studio-424851478-89318.firebasestorage.app",
-  "messagingSenderId": "682048999019",
-  "measurementId": "",
-  "oAuthClientId": "682048999019-f51079lq7qr692r8mb4e27avqqec3sro.apps.googleusercontent.com",
+  "apiKey": "AIzaSyDKn0ygyp3VvHXkHB9G47Xc-1lsedBdGc0",
+  "authDomain": "buna-ethiopia.firebaseapp.com",
+  "projectId": "buna-ethiopia",
+  "firestoreDatabaseId": "(default)",
+  "storageBucket": "buna-ethiopia.firebasestorage.app",
+  "messagingSenderId": "419623606773",
+  "appId": "1:419623606773:web:091915653f6360a90ce8bc",
+  "measurementId": "G-GCWPE60GT5",
+   "oAuthClientId": "",
   "recaptchaSiteKey": ""
 }
