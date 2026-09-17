@@ -71,6 +71,12 @@ const startServer = async () => {
     console.log("Vite development middleware integrated.");
   } else {
     const distPath = path.join(process.cwd(), "dist");
+    app.use((req, res, next) => {
+      if (req.path.endsWith(".cjs") || req.path.endsWith(".map") || req.path.endsWith(".ts")) {
+        return res.status(404).end();
+      }
+      next();
+    });
     app.use(express.static(distPath));
     app.get("*", (req, res) => {
       res.sendFile(path.join(distPath, "index.html"));
