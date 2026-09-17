@@ -10,7 +10,7 @@ import ownerRouter from "./server/routes/owner.js";
 import wallRouter from "./server/routes/wall.js";
 import eventsRouter from "./server/routes/events.js";
 import ethiopiaRouter, { ethiopianRegions } from "./server/routes/ethiopia.js";
-import { getState } from "./server/db.js";
+import { getPromotions, getRafflePrizes } from "./server/db.js";
 
 dotenv.config();
 
@@ -32,16 +32,23 @@ app.use("/api/ethiopia", ethiopiaRouter);
 app.use("/api/passport", ethiopiaRouter);
 
 // Public promotions endpoint (doesn't leak owner revenue or order stats)
-app.get("/api/promotions", (req, res) => {
-  const state = getState();
-  const activePromos = (state.promotions || []).filter((p: any) => p.active);
-  res.json({ success: true, promotions: activePromos });
+app.get("/api/promotions", async (req, res) => {
+  try {
+    const activePromos = await getPromotions(true);
+    res.json({ success: true, promotions: activePromos });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || "Failed to fetch promotions" });
+  }
 });
 
 // Backwards compatibility for GET /api/raffle/prizes
-app.get("/api/raffle/prizes", (req, res) => {
-  const state = getState();
-  res.json(state.rafflePrizes || []);
+app.get("/api/raffle/prizes", async (req, res) => {
+  try {
+    const prizes = await getRafflePrizes();
+    res.json(prizes || []);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || "Failed to fetch prizes" });
+  }
 });
 
 // Backwards compatibility for GET /api/ethiopia/regions

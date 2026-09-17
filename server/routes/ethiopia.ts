@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { getState, saveDb, getProfile } from "../db.js";
+import { getProfile, saveProfile, addActivityLog } from "../db.js";
 
 const router = Router();
 
@@ -82,40 +82,40 @@ router.get("/regions", (req, res) => {
   res.json(ethiopianRegions);
 });
 
-router.post("/stamp", (req, res) => {
-  const { regionName } = req.body;
-  const region = ethiopianRegions.find(r => r.name.toLowerCase() === (regionName || "").toLowerCase());
+router.post("/stamp", async (req, res) => {
+  try {
+    const { regionName } = req.body;
+    const region = ethiopianRegions.find(r => r.name.toLowerCase() === (regionName || "").toLowerCase());
 
-  if (!region) {
-    return res.status(404).json({ error: "Region not found" });
-  }
-
-  const profile = getProfile(req);
-  if (!profile.passportStamps.includes(region.name)) {
-    profile.passportStamps.push(region.name);
-    profile.points += 50;
-
-    if (!profile.unlockedBadges.includes(region.badgeName)) {
-      profile.unlockedBadges.push(region.badgeName);
+    if (!region) {
+      return res.status(404).json({ error: "Region not found" });
     }
 
-    if (profile.passportStamps.length === ethiopianRegions.length &&
-        !profile.unlockedBadges.includes("Ethiopian Coffee Master")) {
-      profile.unlockedBadges.push("Ethiopian Coffee Master");
-      profile.points += 200;
+    const profile = await getProfile(req);
+    if (!profile.passportStamps.includes(region.name)) {
+      profile.passportStamps.push(region.name);
+      profile.points += 50;
+
+      if (!profile.unlockedBadges.includes(region.badgeName)) {
+        profile.unlockedBadges.push(region.badgeName);
+      }
+
+      if (
+        profile.passportStamps.length === ethiopianRegions.length &&
+        !profile.unlockedBadges.includes("Ethiopian Coffee Master")
+      ) {
+        profile.unlockedBadges.push("Ethiopian Coffee Master");
+        profile.points += 200;
+      }
+
+      await saveProfile(profile);
+      await addActivityLog(`Stamped coffee passport for ${region.name}! (+50 pts)`);
     }
 
-    const state = getState();
-    state.shopStats.activityLog.unshift({
-      id: "act_" + Date.now(),
-      text: `Stamped coffee passport for ${region.name}! (+50 pts)`,
-      time: "Just now"
-    });
-
-    saveDb();
+    res.json({ success: true, loyalty: profile });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || "Failed to stamp passport" });
   }
-
-  res.json({ success: true, loyalty: profile });
 });
 
 export default router;

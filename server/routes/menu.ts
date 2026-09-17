@@ -1,40 +1,45 @@
 import { Router } from "express";
-import { getState, saveDb } from "../db.js";
+import {
+  getMenuItems,
+  addMenuItem,
+  editMenuItem,
+  toggleMenuItemStatus,
+  deleteMenuItem
+} from "../db.js";
 import { adminAuthMiddleware } from "../middleware.js";
 
 const router = Router();
 
-router.get("/", (req, res) => {
-  const state = getState();
-  res.json(state.menuItems);
+router.get("/", async (req, res) => {
+  try {
+    const items = await getMenuItems();
+    res.json(items);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || "Failed to fetch menu items" });
+  }
 });
 
-router.post("/", adminAuthMiddleware, (req, res) => {
-  const state = getState();
-  const { action, item } = req.body;
+router.post("/", adminAuthMiddleware, async (req, res) => {
+  try {
+    const { action, item } = req.body;
+    let menuItems;
 
-  if (action === "toggle-status") {
-    state.menuItems = state.menuItems.map(m =>
-      m.id === item.id ? { ...m, soldOut: !m.soldOut } : m
-    );
-  } else if (action === "edit") {
-    state.menuItems = state.menuItems.map(m =>
-      m.id === item.id ? { ...m, ...item } : m
-    );
-  } else if (action === "add") {
-    const newItem = {
-      ...item,
-      id: "m_" + Date.now(),
-      rating: 5.0,
-      soldOut: false
-    };
-    state.menuItems.push(newItem);
-  } else if (action === "delete") {
-    state.menuItems = state.menuItems.filter(m => m.id !== item.id);
+    if (action === "toggle-status") {
+      menuItems = await toggleMenuItemStatus(item.id);
+    } else if (action === "edit") {
+      menuItems = await editMenuItem(item.id, item);
+    } else if (action === "add") {
+      menuItems = await addMenuItem(item);
+    } else if (action === "delete") {
+      menuItems = await deleteMenuItem(item.id);
+    } else {
+      menuItems = await getMenuItems();
+    }
+
+    res.json({ success: true, menuItems });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || "Failed to update menu items" });
   }
-  
-  saveDb();
-  res.json({ success: true, menuItems: state.menuItems });
 });
 
 export default router;
