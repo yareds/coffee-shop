@@ -18,18 +18,22 @@ import {
   updateOrderStatus,
   getProfile
 } from "../db.js";
-import { adminAuthMiddleware, createAdminToken } from "../middleware.js";
+import { adminAuthMiddleware, createAdminToken, verifyAdminPin } from "../middleware.js";
 
 const router = Router();
 
 // 1. Admin PIN verification & login endpoint
 router.post("/verify-pin", (req, res) => {
-  const pin = (req.body?.adminPin || req.body?.pin || "").toString().trim().toLowerCase();
-  const configuredPin = (process.env.ADMIN_PIN || "2026").toString().trim().toLowerCase();
+  const pin = (req.body?.adminPin || req.body?.pin || "").toString().trim();
 
-  const allowedPins = [configuredPin, "2026", "1234", "admin", "admin888"];
+  // Fail closed: reject all attempts if ADMIN_PIN is not configured
+  if (!process.env.ADMIN_PIN || !process.env.ADMIN_PIN.trim()) {
+    return res.status(401).json({
+      error: "Admin PIN authentication is not configured on the server."
+    });
+  }
 
-  if (allowedPins.includes(pin)) {
+  if (pin && verifyAdminPin(pin)) {
     const token = createAdminToken();
     return res.json({
       success: true,
@@ -44,7 +48,7 @@ router.post("/verify-pin", (req, res) => {
   }
 
   res.status(401).json({
-    error: "Invalid Admin PIN. (Default PIN is 2026)"
+    error: "Invalid Admin PIN."
   });
 });
 
@@ -86,12 +90,16 @@ router.post("/google-auth", (req, res) => {
 
 // Also support POST /api/admin/login alias endpoint for admin session login
 router.post("/login", (req, res) => {
-  const pin = (req.body?.adminPin || req.body?.pin || "").toString().trim().toLowerCase();
-  const configuredPin = (process.env.ADMIN_PIN || "2026").toString().trim().toLowerCase();
+  const pin = (req.body?.adminPin || req.body?.pin || "").toString().trim();
 
-  const allowedPins = [configuredPin, "2026", "1234", "admin", "admin888"];
+  // Fail closed: reject all attempts if ADMIN_PIN is not configured
+  if (!process.env.ADMIN_PIN || !process.env.ADMIN_PIN.trim()) {
+    return res.status(401).json({
+      error: "Admin PIN authentication is not configured on the server."
+    });
+  }
 
-  if (allowedPins.includes(pin)) {
+  if (pin && verifyAdminPin(pin)) {
     const token = createAdminToken();
     return res.json({
       success: true,
@@ -106,7 +114,7 @@ router.post("/login", (req, res) => {
   }
 
   res.status(401).json({
-    error: "Invalid Admin PIN. (Default PIN is 2026)"
+    error: "Invalid Admin PIN."
   });
 });
 

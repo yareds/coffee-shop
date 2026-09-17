@@ -16,7 +16,7 @@ export default function OwnerDashboard() {
 
   const getAdminHeaders = () => {
     const token = localStorage.getItem("buna_admin_token") || "";
-    const pin = localStorage.getItem("buna_admin_pin") || "2026";
+    const pin = localStorage.getItem("buna_admin_pin") || "";
     return {
       "Content-Type": "application/json",
       "X-Admin-Token": token,

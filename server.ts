@@ -4,7 +4,6 @@ process.on("unhandledRejection", (err) => {
 
 import express from "express";
 import path from "path";
-import { createServer as createViteServer } from "vite";
 import dotenv from "dotenv";
 
 import menuRouter from "./server/routes/menu.js";
@@ -63,6 +62,7 @@ app.get("/api/ethiopia/regions", (req, res) => {
 // Server Initialization
 const startServer = async () => {
   if (process.env.NODE_ENV !== "production") {
+    const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
@@ -88,4 +88,8 @@ const startServer = async () => {
   });
 };
 
-startServer();
+export { app };
+
+if (process.env.FUNCTIONS_TARGET !== "true") {
+  startServer();
+}
