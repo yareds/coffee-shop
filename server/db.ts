@@ -4,7 +4,7 @@ import os from "os";
 import { initializeApp, getApps } from "firebase-admin/app";
 import type { App } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
-import type { Firestore } from "firebase-admin/firestore";
+import type { Firestore, CollectionReference } from "firebase-admin/firestore";
 
 // Process-level safety net for unhandled credential resolution rejections
 process.on("unhandledRejection", (err) => {
@@ -355,22 +355,6 @@ export const INITIAL_STATE: AppState = {
   }
 };
 
-// Detect project configuration
-let projectId = process.env.FIREBASE_PROJECT_ID || process.env.GCLOUD_PROJECT;
-if (!projectId) {
-  try {
-    const configPath = path.join(process.cwd(), "firebase-applet-config.json");
-    if (fs.existsSync(configPath)) {
-      const config = JSON.parse(fs.readFileSync(configPath, "utf-8"));
-      if (config.projectId) {
-        projectId = config.projectId;
-      }
-    }
-  } catch (e) {
-    // ignore
-  }
-}
-
 // In-memory shadow state to guarantee 100% smooth fallback for local dev / unauthenticated container sandbox
 let memoryState: AppState = JSON.parse(JSON.stringify(INITIAL_STATE));
 let firestoreConnected = false;
@@ -424,155 +408,227 @@ function checkHasLikelyCredentials(): boolean {
   return false;
 }
 
-// Upfront credential check before initializing Firebase Admin or constructing Firestore client
-const hasCredentials = checkHasLikelyCredentials();
+export type CollectionsMap = {
+  menuItems: CollectionReference;
+  events: CollectionReference;
+  promotions: CollectionReference;
+  rafflePrizes: CollectionReference;
+  registeredUsers: CollectionReference;
+  orders: CollectionReference;
+  loyaltyProfiles: CollectionReference;
+  shopStats: CollectionReference;
+  communityPosts: CollectionReference;
+};
+
+let initialized = false;
 let isFirestoreAvailable = false;
 let adminApp: App | null = null;
 let adminDb: Firestore | null = null;
+let collectionsInstance: CollectionsMap | null = null;
+let hasInitiatedSeed = false;
+let hasSeeded = false;
+let seedPromise: Promise<void> | null = null;
 
-if (!hasCredentials) {
-  console.warn("[Firestore Admin] No Application Default Credentials found (missing GOOGLE_APPLICATION_CREDENTIALS, Cloud Run environment, or gcloud ADC). Firestore client will not be reachable; running in memoryState-only fallback mode.");
-} else {
-  try {
-    if (!getApps().length) {
-      adminApp = initializeApp({
-        projectId: projectId || "buna-ethiopia",
-      });
-    } else {
-      adminApp = getApps()[0];
-    }
-    adminDb = getFirestore(adminApp);
-    isFirestoreAvailable = true;
-  } catch (initErr: any) {
-    isFirestoreAvailable = false;
-    console.warn(`[Firestore Admin] Failed to initialize Firebase Admin SDK (${initErr?.message || initErr}). Firestore client will not be reachable; running in memoryState-only fallback mode.`);
+export function getAdminDb(): Firestore | null {
+  if (initialized) {
+    return adminDb;
   }
+  initialized = true;
+
+  // Detect project configuration
+  let targetProjectId = process.env.FIREBASE_PROJECT_ID || process.env.GCLOUD_PROJECT;
+  if (!targetProjectId) {
+    try {
+      const configPath = path.join(process.cwd(), "firebase-applet-config.json");
+      if (fs.existsSync(configPath)) {
+        const config = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+        if (config.projectId) {
+          targetProjectId = config.projectId;
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  const hasCredentials = checkHasLikelyCredentials();
+  if (!hasCredentials) {
+    console.warn("[Firestore Admin] No Application Default Credentials found (missing GOOGLE_APPLICATION_CREDENTIALS, Cloud Run environment, or gcloud ADC). Firestore client will not be reachable; running in memoryState-only fallback mode.");
+    isFirestoreAvailable = false;
+    adminDb = null;
+    collectionsInstance = null;
+  } else {
+    try {
+      if (!getApps().length) {
+        adminApp = initializeApp({
+          projectId: targetProjectId || "buna-ethiopia",
+        });
+      } else {
+        adminApp = getApps()[0];
+      }
+      adminDb = getFirestore(adminApp);
+      isFirestoreAvailable = true;
+      collectionsInstance = {
+        menuItems: adminDb.collection("menuItems"),
+        events: adminDb.collection("events"),
+        promotions: adminDb.collection("promotions"),
+        rafflePrizes: adminDb.collection("rafflePrizes"),
+        registeredUsers: adminDb.collection("registeredUsers"),
+        orders: adminDb.collection("orders"),
+        loyaltyProfiles: adminDb.collection("loyaltyProfiles"),
+        shopStats: adminDb.collection("shopStats"),
+        communityPosts: adminDb.collection("community_posts"),
+      };
+    } catch (initErr: any) {
+      isFirestoreAvailable = false;
+      adminDb = null;
+      collectionsInstance = null;
+      console.warn(`[Firestore Admin] Failed to initialize Firebase Admin SDK (${initErr?.message || initErr}). Firestore client will not be reachable; running in memoryState-only fallback mode.`);
+    }
+  }
+
+  if (isFirestoreAvailable && !hasInitiatedSeed) {
+    hasInitiatedSeed = true;
+    seedDatabaseIfEmpty().catch(err => {
+      isFirestoreAvailable = false;
+      logFirestoreFallback("seedDatabaseIfEmpty init", err);
+    });
+  }
+
+  return adminDb;
 }
 
-// Collection References
-export const COLLECTIONS = adminDb
-  ? {
-      menuItems: adminDb.collection("menuItems"),
-      events: adminDb.collection("events"),
-      promotions: adminDb.collection("promotions"),
-      rafflePrizes: adminDb.collection("rafflePrizes"),
-      registeredUsers: adminDb.collection("registeredUsers"),
-      orders: adminDb.collection("orders"),
-      loyaltyProfiles: adminDb.collection("loyaltyProfiles"),
-      shopStats: adminDb.collection("shopStats"),
-      communityPosts: adminDb.collection("community_posts"),
-    }
-  : null;
+export function getCollections(): CollectionsMap | null {
+  getAdminDb();
+  return collectionsInstance;
+}
 
-// Idempotent seeding on server startup
+// Collection References Proxy - lazily accesses collections after initialization
+export const COLLECTIONS = new Proxy({} as CollectionsMap, {
+  get(_target, prop: keyof CollectionsMap) {
+    const cols = getCollections();
+    return cols ? cols[prop] : undefined;
+  }
+});
+
+// Idempotent seeding on first access
 export async function seedDatabaseIfEmpty(): Promise<void> {
-  if (!isFirestoreAvailable || !COLLECTIONS || !adminDb) {
+  const db = getAdminDb();
+  const cols = getCollections();
+  if (!isFirestoreAvailable || !cols || !db) {
     return;
   }
-  try {
-    // 1. Menu Items
-    const menuSnap = await COLLECTIONS.menuItems.limit(1).get();
-    if (menuSnap.empty) {
-      console.log("[Firestore Admin] Seeding menuItems collection...");
-      const batch = adminDb.batch();
-      for (const item of INITIAL_STATE.menuItems) {
-        batch.set(COLLECTIONS.menuItems.doc(item.id), item);
-      }
-      await batch.commit();
-    }
-
-    // 2. Events
-    const eventsSnap = await COLLECTIONS.events.limit(1).get();
-    if (eventsSnap.empty) {
-      console.log("[Firestore Admin] Seeding events collection...");
-      const batch = adminDb.batch();
-      for (const event of INITIAL_STATE.events) {
-        batch.set(COLLECTIONS.events.doc(event.id), event);
-      }
-      await batch.commit();
-    }
-
-    // 3. Promotions
-    const promoSnap = await COLLECTIONS.promotions.limit(1).get();
-    if (promoSnap.empty) {
-      console.log("[Firestore Admin] Seeding promotions collection...");
-      const batch = adminDb.batch();
-      for (const promo of INITIAL_STATE.promotions) {
-        batch.set(COLLECTIONS.promotions.doc(promo.id), promo);
-      }
-      await batch.commit();
-    }
-
-    // 4. Raffle Prizes
-    const raffleSnap = await COLLECTIONS.rafflePrizes.limit(1).get();
-    if (raffleSnap.empty) {
-      console.log("[Firestore Admin] Seeding rafflePrizes collection...");
-      const batch = adminDb.batch();
-      for (const prize of INITIAL_STATE.rafflePrizes) {
-        batch.set(COLLECTIONS.rafflePrizes.doc(prize.id), prize);
-      }
-      await batch.commit();
-    }
-
-    // 5. Registered Users
-    const usersSnap = await COLLECTIONS.registeredUsers.limit(1).get();
-    if (usersSnap.empty) {
-      console.log("[Firestore Admin] Seeding registeredUsers collection...");
-      const batch = adminDb.batch();
-      for (const user of INITIAL_STATE.registeredUsers) {
-        batch.set(COLLECTIONS.registeredUsers.doc(user.id), user);
-      }
-      await batch.commit();
-    }
-
-    // 6. Shop Stats (Single document 'current')
-    const statsDoc = await COLLECTIONS.shopStats.doc("current").get();
-    if (!statsDoc.exists) {
-      console.log("[Firestore Admin] Seeding shopStats document ('current')...");
-      await COLLECTIONS.shopStats.doc("current").set(INITIAL_STATE.shopStats);
-    }
-
-    // 7. Community Posts (Unified community wall)
-    const postsSnap = await COLLECTIONS.communityPosts.limit(1).get();
-    if (postsSnap.empty) {
-      console.log("[Firestore Admin] Seeding community_posts collection...");
-      const batch = adminDb.batch();
-      for (const post of INITIAL_STATE.wallPosts) {
-        batch.set(COLLECTIONS.communityPosts.doc(post.id), {
-          author: post.author,
-          avatar: post.avatar,
-          text: post.text,
-          rating: post.rating,
-          image: post.image || null,
-          category: post.category,
-          likes: post.likes || 0,
-          date: post.date,
-          createdAt: new Date(post.date).toISOString()
-        });
-      }
-      await batch.commit();
-    }
-
-    firestoreConnected = true;
-    console.log("[Firestore Admin] All collections checked & seeded successfully.");
-  } catch (err: any) {
-    isFirestoreAvailable = false;
-    logFirestoreFallback("seedDatabaseIfEmpty", err);
+  if (hasSeeded) {
+    return;
   }
-}
+  if (seedPromise) {
+    return seedPromise;
+  }
 
-// Run initial seed non-blockingly only when Firestore is available
-if (isFirestoreAvailable) {
-  seedDatabaseIfEmpty().catch(err => {
-    isFirestoreAvailable = false;
-    logFirestoreFallback("seedDatabaseIfEmpty init", err);
-  });
+  seedPromise = (async () => {
+    try {
+      // 1. Menu Items
+      const menuSnap = await cols.menuItems.limit(1).get();
+      if (menuSnap.empty) {
+        console.log("[Firestore Admin] Seeding menuItems collection...");
+        const batch = db.batch();
+        for (const item of INITIAL_STATE.menuItems) {
+          batch.set(cols.menuItems.doc(item.id), item);
+        }
+        await batch.commit();
+      }
+
+      // 2. Events
+      const eventsSnap = await cols.events.limit(1).get();
+      if (eventsSnap.empty) {
+        console.log("[Firestore Admin] Seeding events collection...");
+        const batch = db.batch();
+        for (const event of INITIAL_STATE.events) {
+          batch.set(cols.events.doc(event.id), event);
+        }
+        await batch.commit();
+      }
+
+      // 3. Promotions
+      const promoSnap = await cols.promotions.limit(1).get();
+      if (promoSnap.empty) {
+        console.log("[Firestore Admin] Seeding promotions collection...");
+        const batch = db.batch();
+        for (const promo of INITIAL_STATE.promotions) {
+          batch.set(cols.promotions.doc(promo.id), promo);
+        }
+        await batch.commit();
+      }
+
+      // 4. Raffle Prizes
+      const raffleSnap = await cols.rafflePrizes.limit(1).get();
+      if (raffleSnap.empty) {
+        console.log("[Firestore Admin] Seeding rafflePrizes collection...");
+        const batch = db.batch();
+        for (const prize of INITIAL_STATE.rafflePrizes) {
+          batch.set(cols.rafflePrizes.doc(prize.id), prize);
+        }
+        await batch.commit();
+      }
+
+      // 5. Registered Users
+      const usersSnap = await cols.registeredUsers.limit(1).get();
+      if (usersSnap.empty) {
+        console.log("[Firestore Admin] Seeding registeredUsers collection...");
+        const batch = db.batch();
+        for (const user of INITIAL_STATE.registeredUsers) {
+          batch.set(cols.registeredUsers.doc(user.id), user);
+        }
+        await batch.commit();
+      }
+
+      // 6. Shop Stats (Single document 'current')
+      const statsDoc = await cols.shopStats.doc("current").get();
+      if (!statsDoc.exists) {
+        console.log("[Firestore Admin] Seeding shopStats document ('current')...");
+        await cols.shopStats.doc("current").set(INITIAL_STATE.shopStats);
+      }
+
+      // 7. Community Posts (Unified community wall)
+      const postsSnap = await cols.communityPosts.limit(1).get();
+      if (postsSnap.empty) {
+        console.log("[Firestore Admin] Seeding community_posts collection...");
+        const batch = db.batch();
+        for (const post of INITIAL_STATE.wallPosts) {
+          batch.set(cols.communityPosts.doc(post.id), {
+            author: post.author,
+            avatar: post.avatar,
+            text: post.text,
+            rating: post.rating,
+            image: post.image || null,
+            category: post.category,
+            likes: post.likes || 0,
+            date: post.date,
+            createdAt: new Date(post.date).toISOString()
+          });
+        }
+        await batch.commit();
+      }
+
+      firestoreConnected = true;
+      hasSeeded = true;
+      console.log("[Firestore Admin] All collections checked & seeded successfully.");
+    } catch (err: any) {
+      isFirestoreAvailable = false;
+      logFirestoreFallback("seedDatabaseIfEmpty", err);
+    } finally {
+      seedPromise = null;
+    }
+  })();
+
+  return seedPromise;
 }
 
 // ==========================================
 // 1. Menu Items API Helpers
 // ==========================================
 export async function getMenuItems(): Promise<MenuItem[]> {
+  getAdminDb();
   if (isFirestoreAvailable && COLLECTIONS) {
     try {
       const snap = await COLLECTIONS.menuItems.get();
@@ -590,6 +646,7 @@ export async function getMenuItems(): Promise<MenuItem[]> {
 }
 
 export async function addMenuItem(item: Omit<MenuItem, "id">): Promise<MenuItem[]> {
+  getAdminDb();
   const newItem: MenuItem = {
     ...item,
     id: "m_" + Date.now(),
@@ -614,6 +671,7 @@ export async function addMenuItem(item: Omit<MenuItem, "id">): Promise<MenuItem[
 }
 
 export async function editMenuItem(id: string, itemUpdates: Partial<MenuItem>): Promise<MenuItem[]> {
+  getAdminDb();
   memoryState.menuItems = memoryState.menuItems.map(m =>
     m.id === id ? { ...m, ...itemUpdates } : m
   );
@@ -631,6 +689,7 @@ export async function editMenuItem(id: string, itemUpdates: Partial<MenuItem>): 
 }
 
 export async function toggleMenuItemStatus(id: string): Promise<MenuItem[]> {
+  getAdminDb();
   const current = memoryState.menuItems.find(m => m.id === id);
   const newStatus = current ? !current.soldOut : false;
 
@@ -651,6 +710,7 @@ export async function toggleMenuItemStatus(id: string): Promise<MenuItem[]> {
 }
 
 export async function deleteMenuItem(id: string): Promise<MenuItem[]> {
+  getAdminDb();
   memoryState.menuItems = memoryState.menuItems.filter(m => m.id !== id);
 
   if (isFirestoreAvailable && COLLECTIONS) {
@@ -669,6 +729,7 @@ export async function deleteMenuItem(id: string): Promise<MenuItem[]> {
 // 2. Events API Helpers
 // ==========================================
 export async function getEvents(): Promise<CoffeeEvent[]> {
+  getAdminDb();
   if (isFirestoreAvailable && COLLECTIONS) {
     try {
       const snap = await COLLECTIONS.events.get();
@@ -689,6 +750,7 @@ export async function bookEvent(
   eventId: string,
   userEmail?: string
 ): Promise<{ success: boolean; events: CoffeeEvent[]; error?: string }> {
+  getAdminDb();
   try {
     let updatedEvents = memoryState.events;
 
@@ -751,6 +813,7 @@ export async function bookEvent(
 // 3. Promotions API Helpers
 // ==========================================
 export async function getPromotions(onlyActive?: boolean): Promise<Promotion[]> {
+  getAdminDb();
   if (isFirestoreAvailable && COLLECTIONS) {
     try {
       let queryRef = COLLECTIONS.promotions;
@@ -769,6 +832,7 @@ export async function getPromotions(onlyActive?: boolean): Promise<Promotion[]> 
 }
 
 export async function addPromotion(promo: Omit<Promotion, "id">): Promise<Promotion[]> {
+  getAdminDb();
   const newPromo: Promotion = {
     ...promo,
     id: "pr_" + Date.now(),
@@ -791,6 +855,7 @@ export async function addPromotion(promo: Omit<Promotion, "id">): Promise<Promot
 }
 
 export async function editPromotion(id: string, promoUpdates: Partial<Promotion>): Promise<Promotion[]> {
+  getAdminDb();
   memoryState.promotions = memoryState.promotions.map(p =>
     p.id === id ? { ...p, ...promoUpdates } : p
   );
@@ -808,6 +873,7 @@ export async function editPromotion(id: string, promoUpdates: Partial<Promotion>
 }
 
 export async function togglePromotion(id: string): Promise<Promotion[]> {
+  getAdminDb();
   const current = memoryState.promotions.find(p => p.id === id);
   const newActive = current ? !current.active : false;
 
@@ -828,6 +894,7 @@ export async function togglePromotion(id: string): Promise<Promotion[]> {
 }
 
 export async function deletePromotion(id: string): Promise<Promotion[]> {
+  getAdminDb();
   memoryState.promotions = memoryState.promotions.filter(p => p.id !== id);
 
   if (isFirestoreAvailable && COLLECTIONS) {
@@ -846,6 +913,7 @@ export async function deletePromotion(id: string): Promise<Promotion[]> {
 // 4. Raffle Prizes API Helpers
 // ==========================================
 export async function getRafflePrizes(): Promise<RafflePrize[]> {
+  getAdminDb();
   if (isFirestoreAvailable && COLLECTIONS) {
     try {
       const snap = await COLLECTIONS.rafflePrizes.get();
@@ -863,6 +931,7 @@ export async function getRafflePrizes(): Promise<RafflePrize[]> {
 }
 
 export async function addRafflePrize(prize: Omit<RafflePrize, "id">): Promise<RafflePrize[]> {
+  getAdminDb();
   const newPrize: RafflePrize = {
     ...prize,
     id: "rp_" + Date.now(),
@@ -885,6 +954,7 @@ export async function addRafflePrize(prize: Omit<RafflePrize, "id">): Promise<Ra
 }
 
 export async function editRafflePrize(id: string, updates: Partial<RafflePrize>): Promise<RafflePrize[]> {
+  getAdminDb();
   memoryState.rafflePrizes = memoryState.rafflePrizes.map(p =>
     p.id === id ? { ...p, ...updates } : p
   );
@@ -902,6 +972,7 @@ export async function editRafflePrize(id: string, updates: Partial<RafflePrize>)
 }
 
 export async function toggleRafflePrize(id: string): Promise<RafflePrize[]> {
+  getAdminDb();
   const current = memoryState.rafflePrizes.find(p => p.id === id);
   const newActive = current ? !current.active : false;
 
@@ -922,6 +993,7 @@ export async function toggleRafflePrize(id: string): Promise<RafflePrize[]> {
 }
 
 export async function deleteRafflePrize(id: string): Promise<RafflePrize[]> {
+  getAdminDb();
   memoryState.rafflePrizes = memoryState.rafflePrizes.filter(p => p.id !== id);
 
   if (isFirestoreAvailable && COLLECTIONS) {
@@ -940,6 +1012,7 @@ export async function deleteRafflePrize(id: string): Promise<RafflePrize[]> {
 // 5. Registered Users API Helpers
 // ==========================================
 export async function getRegisteredUsers(): Promise<RegisteredUser[]> {
+  getAdminDb();
   if (isFirestoreAvailable && COLLECTIONS) {
     try {
       const snap = await COLLECTIONS.registeredUsers.get();
@@ -957,6 +1030,7 @@ export async function getRegisteredUsers(): Promise<RegisteredUser[]> {
 }
 
 export async function addRegisteredUser(user: RegisteredUser): Promise<void> {
+  getAdminDb();
   memoryState.registeredUsers.unshift(user);
 
   if (isFirestoreAvailable && COLLECTIONS) {
@@ -970,6 +1044,7 @@ export async function addRegisteredUser(user: RegisteredUser): Promise<void> {
 }
 
 export async function updateRegisteredUser(id: string, updates: Partial<RegisteredUser>): Promise<void> {
+  getAdminDb();
   memoryState.registeredUsers = memoryState.registeredUsers.map(u =>
     u.id === id ? { ...u, ...updates } : u
   );
@@ -985,6 +1060,7 @@ export async function updateRegisteredUser(id: string, updates: Partial<Register
 }
 
 export async function deleteRegisteredUser(id: string, userDeviceId?: string): Promise<void> {
+  getAdminDb();
   const user = memoryState.registeredUsers.find(u => u.id === id);
   const devId = userDeviceId || user?.deviceId;
   const userEmail = user?.email?.toLowerCase();
@@ -1040,6 +1116,7 @@ export async function deleteRegisteredUser(id: string, userDeviceId?: string): P
 }
 
 export async function resetUserSpin(id: string, userDeviceId?: string): Promise<void> {
+  getAdminDb();
   const user = memoryState.registeredUsers.find(u => u.id === id);
   const devId = userDeviceId || user?.deviceId;
   const userEmail = user?.email?.toLowerCase();
@@ -1091,6 +1168,7 @@ export async function resetUserSpin(id: string, userDeviceId?: string): Promise<
 // 6. Orders API Helpers
 // ==========================================
 export async function getOrders(filter?: { email?: string; deviceId?: string }): Promise<Order[]> {
+  getAdminDb();
   if (isFirestoreAvailable && COLLECTIONS) {
     try {
       const snap = await COLLECTIONS.orders.orderBy("createdAt", "desc").get();
@@ -1116,6 +1194,7 @@ export async function getOrders(filter?: { email?: string; deviceId?: string }):
 }
 
 export async function createOrder(order: Order): Promise<Order> {
+  getAdminDb();
   if (!memoryState.orders) memoryState.orders = [];
   memoryState.orders.unshift(order);
 
@@ -1132,6 +1211,7 @@ export async function createOrder(order: Order): Promise<Order> {
 }
 
 export async function updateOrderStatus(orderId: string, status: Order["status"]): Promise<Order | null> {
+  getAdminDb();
   if (!memoryState.orders) memoryState.orders = [];
   const order = memoryState.orders.find(o => o.id === orderId);
   if (order) {
@@ -1154,6 +1234,7 @@ export async function updateOrderStatus(orderId: string, status: Order["status"]
 // 7. Shop Stats API Helpers
 // ==========================================
 export async function getShopStats(): Promise<ShopStats> {
+  getAdminDb();
   if (isFirestoreAvailable && COLLECTIONS) {
     try {
       const doc = await COLLECTIONS.shopStats.doc("current").get();
@@ -1171,6 +1252,7 @@ export async function getShopStats(): Promise<ShopStats> {
 }
 
 export async function updateShopStats(updater: (current: ShopStats) => ShopStats): Promise<ShopStats> {
+  getAdminDb();
   const current = await getShopStats();
   const next = updater({ ...current });
   memoryState.shopStats = next;
@@ -1188,6 +1270,7 @@ export async function updateShopStats(updater: (current: ShopStats) => ShopStats
 }
 
 export async function addActivityLog(text: string): Promise<void> {
+  getAdminDb();
   await updateShopStats(stats => ({
     ...stats,
     activityLog: [
@@ -1211,6 +1294,7 @@ export function getLoyaltyProfileKey(req: any): { key: string; userEmail: string
 }
 
 export async function getProfile(req: any): Promise<LoyaltyProfile> {
+  getAdminDb();
   const { key, userEmail, deviceId } = getLoyaltyProfileKey(req);
 
   let profile: LoyaltyProfile | null = null;
@@ -1279,6 +1363,7 @@ export async function getProfile(req: any): Promise<LoyaltyProfile> {
 }
 
 export async function saveProfile(profile: LoyaltyProfile): Promise<void> {
+  getAdminDb();
   const userEmail = (profile.customerEmail || "").trim().toLowerCase();
   const deviceId = profile.deviceId || "default-device";
   const sanitizedEmail = userEmail.replace(/\//g, "_");
@@ -1301,6 +1386,7 @@ export async function saveProfile(profile: LoyaltyProfile): Promise<void> {
 // 9. Community Wall API Helpers (Unified community_posts collection)
 // ==========================================
 export async function getWallPosts(): Promise<WallPost[]> {
+  getAdminDb();
   if (isFirestoreAvailable && COLLECTIONS) {
     try {
       const snap = await COLLECTIONS.communityPosts.orderBy("createdAt", "desc").get();
@@ -1339,6 +1425,7 @@ export async function addWallPost(post: {
   image?: string;
   category?: string;
 }): Promise<WallPost> {
+  getAdminDb();
   const now = new Date();
   const id = "p_" + Date.now();
   const newPost: WallPost = {
@@ -1380,6 +1467,7 @@ export async function addWallPost(post: {
 
 // Full app state getter for compatibility
 export async function getAppState(): Promise<AppState> {
+  getAdminDb();
   const [
     menuItems,
     events,
