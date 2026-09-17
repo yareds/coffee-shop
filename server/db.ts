@@ -1,7 +1,15 @@
 import fs from "fs";
 import path from "path";
-import { initializeApp, getApps, App } from "firebase-admin/app";
-import { getFirestore, Firestore } from "firebase-admin/firestore";
+import os from "os";
+import { initializeApp, getApps } from "firebase-admin/app";
+import type { App } from "firebase-admin/app";
+import { getFirestore } from "firebase-admin/firestore";
+import type { Firestore } from "firebase-admin/firestore";
+
+// Process-level safety net for unhandled credential resolution rejections
+process.on("unhandledRejection", (err) => {
+  console.error("[Unhandled Rejection]", err);
+});
 
 export interface MenuItem {
   id: string;
@@ -363,31 +371,6 @@ if (!projectId) {
   }
 }
 
-// Initialize Firebase Admin SDK
-let adminApp: App;
-if (!getApps().length) {
-  adminApp = initializeApp({
-    projectId: projectId || "buna-ethiopia",
-  });
-} else {
-  adminApp = getApps()[0];
-}
-
-export const adminDb: Firestore = getFirestore(adminApp);
-
-// Collection References
-export const COLLECTIONS = {
-  menuItems: adminDb.collection("menuItems"),
-  events: adminDb.collection("events"),
-  promotions: adminDb.collection("promotions"),
-  rafflePrizes: adminDb.collection("rafflePrizes"),
-  registeredUsers: adminDb.collection("registeredUsers"),
-  orders: adminDb.collection("orders"),
-  loyaltyProfiles: adminDb.collection("loyaltyProfiles"),
-  shopStats: adminDb.collection("shopStats"),
-  communityPosts: adminDb.collection("community_posts"),
-};
-
 // In-memory shadow state to guarantee 100% smooth fallback for local dev / unauthenticated container sandbox
 let memoryState: AppState = JSON.parse(JSON.stringify(INITIAL_STATE));
 let firestoreConnected = false;
@@ -400,8 +383,92 @@ function logFirestoreFallback(op: string, err: any) {
   }
 }
 
+// Cheap upfront check for whether Google Cloud / Application Default Credentials are likely available
+function checkHasLikelyCredentials(): boolean {
+  // 1. Explicit service account file via GOOGLE_APPLICATION_CREDENTIALS
+  if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
+    try {
+      if (fs.existsSync(process.env.GOOGLE_APPLICATION_CREDENTIALS)) {
+        return true;
+      }
+    } catch {
+      // ignore
+    }
+    return false;
+  }
+
+  // 2. Emulator environment
+  if (process.env.FIRESTORE_EMULATOR_HOST) {
+    return true;
+  }
+
+  // 3. Google Cloud hosted environment (Cloud Run, Cloud Functions, App Engine, GKE)
+  if (process.env.K_SERVICE || process.env.FUNCTION_TARGET || process.env.GAE_ENV || process.env.GAE_INSTANCE) {
+    return true;
+  }
+
+  // 4. Well-known gcloud CLI Application Default Credentials file on developer machines
+  try {
+    const isWindows = process.platform === "win32";
+    const adcPath = isWindows
+      ? path.join(process.env.APPDATA || "", "gcloud/application_default_credentials.json")
+      : path.join(os.homedir(), ".config/gcloud/application_default_credentials.json");
+
+    if (fs.existsSync(adcPath)) {
+      return true;
+    }
+  } catch {
+    // ignore
+  }
+
+  return false;
+}
+
+// Upfront credential check before initializing Firebase Admin or constructing Firestore client
+const hasCredentials = checkHasLikelyCredentials();
+let isFirestoreAvailable = false;
+let adminApp: App | null = null;
+let adminDb: Firestore | null = null;
+
+if (!hasCredentials) {
+  console.warn("[Firestore Admin] No Application Default Credentials found (missing GOOGLE_APPLICATION_CREDENTIALS, Cloud Run environment, or gcloud ADC). Firestore client will not be reachable; running in memoryState-only fallback mode.");
+} else {
+  try {
+    if (!getApps().length) {
+      adminApp = initializeApp({
+        projectId: projectId || "buna-ethiopia",
+      });
+    } else {
+      adminApp = getApps()[0];
+    }
+    adminDb = getFirestore(adminApp);
+    isFirestoreAvailable = true;
+  } catch (initErr: any) {
+    isFirestoreAvailable = false;
+    console.warn(`[Firestore Admin] Failed to initialize Firebase Admin SDK (${initErr?.message || initErr}). Firestore client will not be reachable; running in memoryState-only fallback mode.`);
+  }
+}
+
+// Collection References
+export const COLLECTIONS = adminDb
+  ? {
+      menuItems: adminDb.collection("menuItems"),
+      events: adminDb.collection("events"),
+      promotions: adminDb.collection("promotions"),
+      rafflePrizes: adminDb.collection("rafflePrizes"),
+      registeredUsers: adminDb.collection("registeredUsers"),
+      orders: adminDb.collection("orders"),
+      loyaltyProfiles: adminDb.collection("loyaltyProfiles"),
+      shopStats: adminDb.collection("shopStats"),
+      communityPosts: adminDb.collection("community_posts"),
+    }
+  : null;
+
 // Idempotent seeding on server startup
 export async function seedDatabaseIfEmpty(): Promise<void> {
+  if (!isFirestoreAvailable || !COLLECTIONS || !adminDb) {
+    return;
+  }
   try {
     // 1. Menu Items
     const menuSnap = await COLLECTIONS.menuItems.limit(1).get();
@@ -489,28 +556,35 @@ export async function seedDatabaseIfEmpty(): Promise<void> {
     firestoreConnected = true;
     console.log("[Firestore Admin] All collections checked & seeded successfully.");
   } catch (err: any) {
+    isFirestoreAvailable = false;
     logFirestoreFallback("seedDatabaseIfEmpty", err);
   }
 }
 
-// Run initial seed non-blockingly
-seedDatabaseIfEmpty().catch(err => {
-  logFirestoreFallback("seedDatabaseIfEmpty init", err);
-});
+// Run initial seed non-blockingly only when Firestore is available
+if (isFirestoreAvailable) {
+  seedDatabaseIfEmpty().catch(err => {
+    isFirestoreAvailable = false;
+    logFirestoreFallback("seedDatabaseIfEmpty init", err);
+  });
+}
 
 // ==========================================
 // 1. Menu Items API Helpers
 // ==========================================
 export async function getMenuItems(): Promise<MenuItem[]> {
-  try {
-    const snap = await COLLECTIONS.menuItems.get();
-    if (!snap.empty) {
-      const items = snap.docs.map(doc => doc.data() as MenuItem);
-      memoryState.menuItems = items;
-      return items;
+  if (isFirestoreAvailable && COLLECTIONS) {
+    try {
+      const snap = await COLLECTIONS.menuItems.get();
+      if (!snap.empty) {
+        const items = snap.docs.map(doc => doc.data() as MenuItem);
+        memoryState.menuItems = items;
+        return items;
+      }
+    } catch (err) {
+      isFirestoreAvailable = false;
+      logFirestoreFallback("getMenuItems", err);
     }
-  } catch (err) {
-    logFirestoreFallback("getMenuItems", err);
   }
   return memoryState.menuItems;
 }
@@ -527,10 +601,13 @@ export async function addMenuItem(item: Omit<MenuItem, "id">): Promise<MenuItem[
 
   memoryState.menuItems.push(newItem);
 
-  try {
-    await COLLECTIONS.menuItems.doc(newItem.id).set(newItem);
-  } catch (err) {
-    logFirestoreFallback("addMenuItem", err);
+  if (isFirestoreAvailable && COLLECTIONS) {
+    try {
+      await COLLECTIONS.menuItems.doc(newItem.id).set(newItem);
+    } catch (err) {
+      isFirestoreAvailable = false;
+      logFirestoreFallback("addMenuItem", err);
+    }
   }
 
   return getMenuItems();
@@ -541,10 +618,13 @@ export async function editMenuItem(id: string, itemUpdates: Partial<MenuItem>): 
     m.id === id ? { ...m, ...itemUpdates } : m
   );
 
-  try {
-    await COLLECTIONS.menuItems.doc(id).set(itemUpdates, { merge: true });
-  } catch (err) {
-    logFirestoreFallback("editMenuItem", err);
+  if (isFirestoreAvailable && COLLECTIONS) {
+    try {
+      await COLLECTIONS.menuItems.doc(id).set(itemUpdates, { merge: true });
+    } catch (err) {
+      isFirestoreAvailable = false;
+      logFirestoreFallback("editMenuItem", err);
+    }
   }
 
   return getMenuItems();
@@ -558,10 +638,13 @@ export async function toggleMenuItemStatus(id: string): Promise<MenuItem[]> {
     m.id === id ? { ...m, soldOut: newStatus } : m
   );
 
-  try {
-    await COLLECTIONS.menuItems.doc(id).set({ soldOut: newStatus }, { merge: true });
-  } catch (err) {
-    logFirestoreFallback("toggleMenuItemStatus", err);
+  if (isFirestoreAvailable && COLLECTIONS) {
+    try {
+      await COLLECTIONS.menuItems.doc(id).set({ soldOut: newStatus }, { merge: true });
+    } catch (err) {
+      isFirestoreAvailable = false;
+      logFirestoreFallback("toggleMenuItemStatus", err);
+    }
   }
 
   return getMenuItems();
@@ -570,10 +653,13 @@ export async function toggleMenuItemStatus(id: string): Promise<MenuItem[]> {
 export async function deleteMenuItem(id: string): Promise<MenuItem[]> {
   memoryState.menuItems = memoryState.menuItems.filter(m => m.id !== id);
 
-  try {
-    await COLLECTIONS.menuItems.doc(id).delete();
-  } catch (err) {
-    logFirestoreFallback("deleteMenuItem", err);
+  if (isFirestoreAvailable && COLLECTIONS) {
+    try {
+      await COLLECTIONS.menuItems.doc(id).delete();
+    } catch (err) {
+      isFirestoreAvailable = false;
+      logFirestoreFallback("deleteMenuItem", err);
+    }
   }
 
   return getMenuItems();
@@ -583,15 +669,18 @@ export async function deleteMenuItem(id: string): Promise<MenuItem[]> {
 // 2. Events API Helpers
 // ==========================================
 export async function getEvents(): Promise<CoffeeEvent[]> {
-  try {
-    const snap = await COLLECTIONS.events.get();
-    if (!snap.empty) {
-      const events = snap.docs.map(doc => doc.data() as CoffeeEvent);
-      memoryState.events = events;
-      return events;
+  if (isFirestoreAvailable && COLLECTIONS) {
+    try {
+      const snap = await COLLECTIONS.events.get();
+      if (!snap.empty) {
+        const events = snap.docs.map(doc => doc.data() as CoffeeEvent);
+        memoryState.events = events;
+        return events;
+      }
+    } catch (err) {
+      isFirestoreAvailable = false;
+      logFirestoreFallback("getEvents", err);
     }
-  } catch (err) {
-    logFirestoreFallback("getEvents", err);
   }
   return memoryState.events;
 }
@@ -601,22 +690,32 @@ export async function bookEvent(
   userEmail?: string
 ): Promise<{ success: boolean; events: CoffeeEvent[]; error?: string }> {
   try {
-    const eventDocRef = COLLECTIONS.events.doc(eventId);
     let updatedEvents = memoryState.events;
 
-    // Try transactional Firestore update
-    try {
-      await adminDb.runTransaction(async (t) => {
-        const doc = await t.get(eventDocRef);
-        if (!doc.exists) throw new Error("Event not found");
-        const ev = doc.data() as CoffeeEvent;
-        if (ev.seats <= 0) throw new Error("No seats available");
+    // Try transactional Firestore update if available
+    if (isFirestoreAvailable && COLLECTIONS && adminDb) {
+      const eventDocRef = COLLECTIONS.events.doc(eventId);
+      try {
+        await adminDb.runTransaction(async (t) => {
+          const doc = await t.get(eventDocRef);
+          if (!doc.exists) throw new Error("Event not found");
+          const ev = doc.data() as CoffeeEvent;
+          if (ev.seats <= 0) throw new Error("No seats available");
 
-        t.update(eventDocRef, { seats: ev.seats - 1 });
-      });
-      updatedEvents = await getEvents();
-    } catch (dbErr: any) {
-      logFirestoreFallback("bookEvent transaction", dbErr);
+          t.update(eventDocRef, { seats: ev.seats - 1 });
+        });
+        updatedEvents = await getEvents();
+      } catch (dbErr: any) {
+        isFirestoreAvailable = false;
+        logFirestoreFallback("bookEvent transaction", dbErr);
+        const evIndex = memoryState.events.findIndex(e => e.id === eventId);
+        if (evIndex === -1 || memoryState.events[evIndex].seats <= 0) {
+          return { success: false, events: memoryState.events, error: "No seats available or event not found" };
+        }
+        memoryState.events[evIndex].seats -= 1;
+        updatedEvents = memoryState.events;
+      }
+    } else {
       const evIndex = memoryState.events.findIndex(e => e.id === eventId);
       if (evIndex === -1 || memoryState.events[evIndex].seats <= 0) {
         return { success: false, events: memoryState.events, error: "No seats available or event not found" };
@@ -652,16 +751,19 @@ export async function bookEvent(
 // 3. Promotions API Helpers
 // ==========================================
 export async function getPromotions(onlyActive?: boolean): Promise<Promotion[]> {
-  try {
-    let queryRef = COLLECTIONS.promotions;
-    const snap = await queryRef.get();
-    if (!snap.empty) {
-      const list = snap.docs.map(doc => doc.data() as Promotion);
-      memoryState.promotions = list;
-      return onlyActive ? list.filter(p => p.active) : list;
+  if (isFirestoreAvailable && COLLECTIONS) {
+    try {
+      let queryRef = COLLECTIONS.promotions;
+      const snap = await queryRef.get();
+      if (!snap.empty) {
+        const list = snap.docs.map(doc => doc.data() as Promotion);
+        memoryState.promotions = list;
+        return onlyActive ? list.filter(p => p.active) : list;
+      }
+    } catch (err) {
+      isFirestoreAvailable = false;
+      logFirestoreFallback("getPromotions", err);
     }
-  } catch (err) {
-    logFirestoreFallback("getPromotions", err);
   }
   return onlyActive ? memoryState.promotions.filter(p => p.active) : memoryState.promotions;
 }
@@ -676,10 +778,13 @@ export async function addPromotion(promo: Omit<Promotion, "id">): Promise<Promot
 
   memoryState.promotions.push(newPromo);
 
-  try {
-    await COLLECTIONS.promotions.doc(newPromo.id).set(newPromo);
-  } catch (err) {
-    logFirestoreFallback("addPromotion", err);
+  if (isFirestoreAvailable && COLLECTIONS) {
+    try {
+      await COLLECTIONS.promotions.doc(newPromo.id).set(newPromo);
+    } catch (err) {
+      isFirestoreAvailable = false;
+      logFirestoreFallback("addPromotion", err);
+    }
   }
 
   return getPromotions();
@@ -690,10 +795,13 @@ export async function editPromotion(id: string, promoUpdates: Partial<Promotion>
     p.id === id ? { ...p, ...promoUpdates } : p
   );
 
-  try {
-    await COLLECTIONS.promotions.doc(id).set(promoUpdates, { merge: true });
-  } catch (err) {
-    logFirestoreFallback("editPromotion", err);
+  if (isFirestoreAvailable && COLLECTIONS) {
+    try {
+      await COLLECTIONS.promotions.doc(id).set(promoUpdates, { merge: true });
+    } catch (err) {
+      isFirestoreAvailable = false;
+      logFirestoreFallback("editPromotion", err);
+    }
   }
 
   return getPromotions();
@@ -707,10 +815,13 @@ export async function togglePromotion(id: string): Promise<Promotion[]> {
     p.id === id ? { ...p, active: newActive } : p
   );
 
-  try {
-    await COLLECTIONS.promotions.doc(id).set({ active: newActive }, { merge: true });
-  } catch (err) {
-    logFirestoreFallback("togglePromotion", err);
+  if (isFirestoreAvailable && COLLECTIONS) {
+    try {
+      await COLLECTIONS.promotions.doc(id).set({ active: newActive }, { merge: true });
+    } catch (err) {
+      isFirestoreAvailable = false;
+      logFirestoreFallback("togglePromotion", err);
+    }
   }
 
   return getPromotions();
@@ -719,10 +830,13 @@ export async function togglePromotion(id: string): Promise<Promotion[]> {
 export async function deletePromotion(id: string): Promise<Promotion[]> {
   memoryState.promotions = memoryState.promotions.filter(p => p.id !== id);
 
-  try {
-    await COLLECTIONS.promotions.doc(id).delete();
-  } catch (err) {
-    logFirestoreFallback("deletePromotion", err);
+  if (isFirestoreAvailable && COLLECTIONS) {
+    try {
+      await COLLECTIONS.promotions.doc(id).delete();
+    } catch (err) {
+      isFirestoreAvailable = false;
+      logFirestoreFallback("deletePromotion", err);
+    }
   }
 
   return getPromotions();
@@ -732,15 +846,18 @@ export async function deletePromotion(id: string): Promise<Promotion[]> {
 // 4. Raffle Prizes API Helpers
 // ==========================================
 export async function getRafflePrizes(): Promise<RafflePrize[]> {
-  try {
-    const snap = await COLLECTIONS.rafflePrizes.get();
-    if (!snap.empty) {
-      const prizes = snap.docs.map(doc => doc.data() as RafflePrize);
-      memoryState.rafflePrizes = prizes;
-      return prizes;
+  if (isFirestoreAvailable && COLLECTIONS) {
+    try {
+      const snap = await COLLECTIONS.rafflePrizes.get();
+      if (!snap.empty) {
+        const prizes = snap.docs.map(doc => doc.data() as RafflePrize);
+        memoryState.rafflePrizes = prizes;
+        return prizes;
+      }
+    } catch (err) {
+      isFirestoreAvailable = false;
+      logFirestoreFallback("getRafflePrizes", err);
     }
-  } catch (err) {
-    logFirestoreFallback("getRafflePrizes", err);
   }
   return memoryState.rafflePrizes;
 }
@@ -755,10 +872,13 @@ export async function addRafflePrize(prize: Omit<RafflePrize, "id">): Promise<Ra
 
   memoryState.rafflePrizes.push(newPrize);
 
-  try {
-    await COLLECTIONS.rafflePrizes.doc(newPrize.id).set(newPrize);
-  } catch (err) {
-    logFirestoreFallback("addRafflePrize", err);
+  if (isFirestoreAvailable && COLLECTIONS) {
+    try {
+      await COLLECTIONS.rafflePrizes.doc(newPrize.id).set(newPrize);
+    } catch (err) {
+      isFirestoreAvailable = false;
+      logFirestoreFallback("addRafflePrize", err);
+    }
   }
 
   return getRafflePrizes();
@@ -769,10 +889,13 @@ export async function editRafflePrize(id: string, updates: Partial<RafflePrize>)
     p.id === id ? { ...p, ...updates } : p
   );
 
-  try {
-    await COLLECTIONS.rafflePrizes.doc(id).set(updates, { merge: true });
-  } catch (err) {
-    logFirestoreFallback("editRafflePrize", err);
+  if (isFirestoreAvailable && COLLECTIONS) {
+    try {
+      await COLLECTIONS.rafflePrizes.doc(id).set(updates, { merge: true });
+    } catch (err) {
+      isFirestoreAvailable = false;
+      logFirestoreFallback("editRafflePrize", err);
+    }
   }
 
   return getRafflePrizes();
@@ -786,10 +909,13 @@ export async function toggleRafflePrize(id: string): Promise<RafflePrize[]> {
     p.id === id ? { ...p, active: newActive } : p
   );
 
-  try {
-    await COLLECTIONS.rafflePrizes.doc(id).set({ active: newActive }, { merge: true });
-  } catch (err) {
-    logFirestoreFallback("toggleRafflePrize", err);
+  if (isFirestoreAvailable && COLLECTIONS) {
+    try {
+      await COLLECTIONS.rafflePrizes.doc(id).set({ active: newActive }, { merge: true });
+    } catch (err) {
+      isFirestoreAvailable = false;
+      logFirestoreFallback("toggleRafflePrize", err);
+    }
   }
 
   return getRafflePrizes();
@@ -798,10 +924,13 @@ export async function toggleRafflePrize(id: string): Promise<RafflePrize[]> {
 export async function deleteRafflePrize(id: string): Promise<RafflePrize[]> {
   memoryState.rafflePrizes = memoryState.rafflePrizes.filter(p => p.id !== id);
 
-  try {
-    await COLLECTIONS.rafflePrizes.doc(id).delete();
-  } catch (err) {
-    logFirestoreFallback("deleteRafflePrize", err);
+  if (isFirestoreAvailable && COLLECTIONS) {
+    try {
+      await COLLECTIONS.rafflePrizes.doc(id).delete();
+    } catch (err) {
+      isFirestoreAvailable = false;
+      logFirestoreFallback("deleteRafflePrize", err);
+    }
   }
 
   return getRafflePrizes();
@@ -811,15 +940,18 @@ export async function deleteRafflePrize(id: string): Promise<RafflePrize[]> {
 // 5. Registered Users API Helpers
 // ==========================================
 export async function getRegisteredUsers(): Promise<RegisteredUser[]> {
-  try {
-    const snap = await COLLECTIONS.registeredUsers.get();
-    if (!snap.empty) {
-      const users = snap.docs.map(doc => doc.data() as RegisteredUser);
-      memoryState.registeredUsers = users;
-      return users;
+  if (isFirestoreAvailable && COLLECTIONS) {
+    try {
+      const snap = await COLLECTIONS.registeredUsers.get();
+      if (!snap.empty) {
+        const users = snap.docs.map(doc => doc.data() as RegisteredUser);
+        memoryState.registeredUsers = users;
+        return users;
+      }
+    } catch (err) {
+      isFirestoreAvailable = false;
+      logFirestoreFallback("getRegisteredUsers", err);
     }
-  } catch (err) {
-    logFirestoreFallback("getRegisteredUsers", err);
   }
   return memoryState.registeredUsers;
 }
@@ -827,10 +959,13 @@ export async function getRegisteredUsers(): Promise<RegisteredUser[]> {
 export async function addRegisteredUser(user: RegisteredUser): Promise<void> {
   memoryState.registeredUsers.unshift(user);
 
-  try {
-    await COLLECTIONS.registeredUsers.doc(user.id).set(user);
-  } catch (err) {
-    logFirestoreFallback("addRegisteredUser", err);
+  if (isFirestoreAvailable && COLLECTIONS) {
+    try {
+      await COLLECTIONS.registeredUsers.doc(user.id).set(user);
+    } catch (err) {
+      isFirestoreAvailable = false;
+      logFirestoreFallback("addRegisteredUser", err);
+    }
   }
 }
 
@@ -839,10 +974,13 @@ export async function updateRegisteredUser(id: string, updates: Partial<Register
     u.id === id ? { ...u, ...updates } : u
   );
 
-  try {
-    await COLLECTIONS.registeredUsers.doc(id).set(updates, { merge: true });
-  } catch (err) {
-    logFirestoreFallback("updateRegisteredUser", err);
+  if (isFirestoreAvailable && COLLECTIONS) {
+    try {
+      await COLLECTIONS.registeredUsers.doc(id).set(updates, { merge: true });
+    } catch (err) {
+      isFirestoreAvailable = false;
+      logFirestoreFallback("updateRegisteredUser", err);
+    }
   }
 }
 
@@ -853,10 +991,13 @@ export async function deleteRegisteredUser(id: string, userDeviceId?: string): P
 
   memoryState.registeredUsers = memoryState.registeredUsers.filter(u => u.id !== id);
 
-  try {
-    await COLLECTIONS.registeredUsers.doc(id).delete();
-  } catch (err) {
-    logFirestoreFallback("deleteRegisteredUser", err);
+  if (isFirestoreAvailable && COLLECTIONS) {
+    try {
+      await COLLECTIONS.registeredUsers.doc(id).delete();
+    } catch (err) {
+      isFirestoreAvailable = false;
+      logFirestoreFallback("deleteRegisteredUser", err);
+    }
   }
 
   // Clear loyalty profile flags for this user / device
@@ -874,10 +1015,12 @@ export async function deleteRegisteredUser(id: string, userDeviceId?: string): P
     if (memoryState.loyaltyProfiles[devKey]) {
       memoryState.loyaltyProfiles[devKey] = { ...memoryState.loyaltyProfiles[devKey], ...resetFlags };
     }
-    try {
-      await COLLECTIONS.loyaltyProfiles.doc(devKey).set(resetFlags, { merge: true });
-    } catch (e) {
-      // ignore
+    if (isFirestoreAvailable && COLLECTIONS) {
+      try {
+        await COLLECTIONS.loyaltyProfiles.doc(devKey).set(resetFlags, { merge: true });
+      } catch (e) {
+        // ignore
+      }
     }
   }
 
@@ -886,10 +1029,12 @@ export async function deleteRegisteredUser(id: string, userDeviceId?: string): P
     if (memoryState.loyaltyProfiles[emailKey]) {
       memoryState.loyaltyProfiles[emailKey] = { ...memoryState.loyaltyProfiles[emailKey], ...resetFlags };
     }
-    try {
-      await COLLECTIONS.loyaltyProfiles.doc(emailKey).set(resetFlags, { merge: true });
-    } catch (e) {
-      // ignore
+    if (isFirestoreAvailable && COLLECTIONS) {
+      try {
+        await COLLECTIONS.loyaltyProfiles.doc(emailKey).set(resetFlags, { merge: true });
+      } catch (e) {
+        // ignore
+      }
     }
   }
 }
@@ -918,10 +1063,12 @@ export async function resetUserSpin(id: string, userDeviceId?: string): Promise<
     if (memoryState.loyaltyProfiles[devKey]) {
       memoryState.loyaltyProfiles[devKey] = { ...memoryState.loyaltyProfiles[devKey], ...profileSpinReset };
     }
-    try {
-      await COLLECTIONS.loyaltyProfiles.doc(devKey).set(profileSpinReset, { merge: true });
-    } catch (e) {
-      // ignore
+    if (isFirestoreAvailable && COLLECTIONS) {
+      try {
+        await COLLECTIONS.loyaltyProfiles.doc(devKey).set(profileSpinReset, { merge: true });
+      } catch (e) {
+        // ignore
+      }
     }
   }
 
@@ -930,10 +1077,12 @@ export async function resetUserSpin(id: string, userDeviceId?: string): Promise<
     if (memoryState.loyaltyProfiles[emailKey]) {
       memoryState.loyaltyProfiles[emailKey] = { ...memoryState.loyaltyProfiles[emailKey], ...profileSpinReset };
     }
-    try {
-      await COLLECTIONS.loyaltyProfiles.doc(emailKey).set(profileSpinReset, { merge: true });
-    } catch (e) {
-      // ignore
+    if (isFirestoreAvailable && COLLECTIONS) {
+      try {
+        await COLLECTIONS.loyaltyProfiles.doc(emailKey).set(profileSpinReset, { merge: true });
+      } catch (e) {
+        // ignore
+      }
     }
   }
 }
@@ -942,14 +1091,17 @@ export async function resetUserSpin(id: string, userDeviceId?: string): Promise<
 // 6. Orders API Helpers
 // ==========================================
 export async function getOrders(filter?: { email?: string; deviceId?: string }): Promise<Order[]> {
-  try {
-    const snap = await COLLECTIONS.orders.orderBy("createdAt", "desc").get();
-    if (!snap.empty) {
-      const orders = snap.docs.map(doc => doc.data() as Order);
-      memoryState.orders = orders;
+  if (isFirestoreAvailable && COLLECTIONS) {
+    try {
+      const snap = await COLLECTIONS.orders.orderBy("createdAt", "desc").get();
+      if (!snap.empty) {
+        const orders = snap.docs.map(doc => doc.data() as Order);
+        memoryState.orders = orders;
+      }
+    } catch (err) {
+      isFirestoreAvailable = false;
+      logFirestoreFallback("getOrders", err);
     }
-  } catch (err) {
-    logFirestoreFallback("getOrders", err);
   }
 
   let list = memoryState.orders || [];
@@ -967,10 +1119,13 @@ export async function createOrder(order: Order): Promise<Order> {
   if (!memoryState.orders) memoryState.orders = [];
   memoryState.orders.unshift(order);
 
-  try {
-    await COLLECTIONS.orders.doc(order.id).set(order);
-  } catch (err) {
-    logFirestoreFallback("createOrder", err);
+  if (isFirestoreAvailable && COLLECTIONS) {
+    try {
+      await COLLECTIONS.orders.doc(order.id).set(order);
+    } catch (err) {
+      isFirestoreAvailable = false;
+      logFirestoreFallback("createOrder", err);
+    }
   }
 
   return order;
@@ -983,10 +1138,13 @@ export async function updateOrderStatus(orderId: string, status: Order["status"]
     order.status = status;
   }
 
-  try {
-    await COLLECTIONS.orders.doc(orderId).set({ status }, { merge: true });
-  } catch (err) {
-    logFirestoreFallback("updateOrderStatus", err);
+  if (isFirestoreAvailable && COLLECTIONS) {
+    try {
+      await COLLECTIONS.orders.doc(orderId).set({ status }, { merge: true });
+    } catch (err) {
+      isFirestoreAvailable = false;
+      logFirestoreFallback("updateOrderStatus", err);
+    }
   }
 
   return order || null;
@@ -996,15 +1154,18 @@ export async function updateOrderStatus(orderId: string, status: Order["status"]
 // 7. Shop Stats API Helpers
 // ==========================================
 export async function getShopStats(): Promise<ShopStats> {
-  try {
-    const doc = await COLLECTIONS.shopStats.doc("current").get();
-    if (doc.exists) {
-      const stats = doc.data() as ShopStats;
-      memoryState.shopStats = stats;
-      return stats;
+  if (isFirestoreAvailable && COLLECTIONS) {
+    try {
+      const doc = await COLLECTIONS.shopStats.doc("current").get();
+      if (doc.exists) {
+        const stats = doc.data() as ShopStats;
+        memoryState.shopStats = stats;
+        return stats;
+      }
+    } catch (err) {
+      isFirestoreAvailable = false;
+      logFirestoreFallback("getShopStats", err);
     }
-  } catch (err) {
-    logFirestoreFallback("getShopStats", err);
   }
   return memoryState.shopStats;
 }
@@ -1014,10 +1175,13 @@ export async function updateShopStats(updater: (current: ShopStats) => ShopStats
   const next = updater({ ...current });
   memoryState.shopStats = next;
 
-  try {
-    await COLLECTIONS.shopStats.doc("current").set(next);
-  } catch (err) {
-    logFirestoreFallback("updateShopStats", err);
+  if (isFirestoreAvailable && COLLECTIONS) {
+    try {
+      await COLLECTIONS.shopStats.doc("current").set(next);
+    } catch (err) {
+      isFirestoreAvailable = false;
+      logFirestoreFallback("updateShopStats", err);
+    }
   }
 
   return next;
@@ -1051,13 +1215,16 @@ export async function getProfile(req: any): Promise<LoyaltyProfile> {
 
   let profile: LoyaltyProfile | null = null;
 
-  try {
-    const doc = await COLLECTIONS.loyaltyProfiles.doc(key).get();
-    if (doc.exists) {
-      profile = doc.data() as LoyaltyProfile;
+  if (isFirestoreAvailable && COLLECTIONS) {
+    try {
+      const doc = await COLLECTIONS.loyaltyProfiles.doc(key).get();
+      if (doc.exists) {
+        profile = doc.data() as LoyaltyProfile;
+      }
+    } catch (err) {
+      isFirestoreAvailable = false;
+      logFirestoreFallback("getProfile", err);
     }
-  } catch (err) {
-    logFirestoreFallback("getProfile", err);
   }
 
   if (!profile) {
@@ -1099,10 +1266,13 @@ export async function getProfile(req: any): Promise<LoyaltyProfile> {
   memoryState.loyaltyProfiles[key] = profile;
 
   // Persist to Firestore
-  try {
-    await COLLECTIONS.loyaltyProfiles.doc(key).set(profile, { merge: true });
-  } catch (err) {
-    logFirestoreFallback("saveProfile on getProfile", err);
+  if (isFirestoreAvailable && COLLECTIONS) {
+    try {
+      await COLLECTIONS.loyaltyProfiles.doc(key).set(profile, { merge: true });
+    } catch (err) {
+      isFirestoreAvailable = false;
+      logFirestoreFallback("saveProfile on getProfile", err);
+    }
   }
 
   return profile;
@@ -1117,10 +1287,13 @@ export async function saveProfile(profile: LoyaltyProfile): Promise<void> {
   if (!memoryState.loyaltyProfiles) memoryState.loyaltyProfiles = {};
   memoryState.loyaltyProfiles[key] = profile;
 
-  try {
-    await COLLECTIONS.loyaltyProfiles.doc(key).set(profile, { merge: true });
-  } catch (err) {
-    logFirestoreFallback("saveProfile", err);
+  if (isFirestoreAvailable && COLLECTIONS) {
+    try {
+      await COLLECTIONS.loyaltyProfiles.doc(key).set(profile, { merge: true });
+    } catch (err) {
+      isFirestoreAvailable = false;
+      logFirestoreFallback("saveProfile", err);
+    }
   }
 }
 
@@ -1128,29 +1301,32 @@ export async function saveProfile(profile: LoyaltyProfile): Promise<void> {
 // 9. Community Wall API Helpers (Unified community_posts collection)
 // ==========================================
 export async function getWallPosts(): Promise<WallPost[]> {
-  try {
-    const snap = await COLLECTIONS.communityPosts.orderBy("createdAt", "desc").get();
-    if (!snap.empty) {
-      const posts: WallPost[] = snap.docs.map(doc => {
-        const data = doc.data();
-        return {
-          id: doc.id,
-          author: data.author || "Anonymous",
-          avatar: data.avatar || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=60",
-          text: data.text || "",
-          rating: Number(data.rating) || 5,
-          image: data.image || undefined,
-          date: data.date || (data.createdAt ? data.createdAt.split("T")[0] : "Just now"),
-          likes: Number(data.likes) || 0,
-          category: data.category || "review",
-          createdAt: data.createdAt
-        };
-      });
-      memoryState.wallPosts = posts;
-      return posts;
+  if (isFirestoreAvailable && COLLECTIONS) {
+    try {
+      const snap = await COLLECTIONS.communityPosts.orderBy("createdAt", "desc").get();
+      if (!snap.empty) {
+        const posts: WallPost[] = snap.docs.map(doc => {
+          const data = doc.data();
+          return {
+            id: doc.id,
+            author: data.author || "Anonymous",
+            avatar: data.avatar || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=60",
+            text: data.text || "",
+            rating: Number(data.rating) || 5,
+            image: data.image || undefined,
+            date: data.date || (data.createdAt ? data.createdAt.split("T")[0] : "Just now"),
+            likes: Number(data.likes) || 0,
+            category: data.category || "review",
+            createdAt: data.createdAt
+          };
+        });
+        memoryState.wallPosts = posts;
+        return posts;
+      }
+    } catch (err) {
+      isFirestoreAvailable = false;
+      logFirestoreFallback("getWallPosts", err);
     }
-  } catch (err) {
-    logFirestoreFallback("getWallPosts", err);
   }
   return memoryState.wallPosts;
 }
@@ -1180,20 +1356,23 @@ export async function addWallPost(post: {
 
   memoryState.wallPosts.unshift(newPost);
 
-  try {
-    await COLLECTIONS.communityPosts.doc(id).set({
-      author: newPost.author,
-      avatar: newPost.avatar,
-      text: newPost.text,
-      rating: newPost.rating,
-      image: newPost.image || null,
-      date: newPost.date,
-      likes: 0,
-      category: newPost.category,
-      createdAt: newPost.createdAt
-    });
-  } catch (err) {
-    logFirestoreFallback("addWallPost", err);
+  if (isFirestoreAvailable && COLLECTIONS) {
+    try {
+      await COLLECTIONS.communityPosts.doc(id).set({
+        author: newPost.author,
+        avatar: newPost.avatar,
+        text: newPost.text,
+        rating: newPost.rating,
+        image: newPost.image || null,
+        date: newPost.date,
+        likes: 0,
+        category: newPost.category,
+        createdAt: newPost.createdAt
+      });
+    } catch (err) {
+      isFirestoreAvailable = false;
+      logFirestoreFallback("addWallPost", err);
+    }
   }
 
   return newPost;
