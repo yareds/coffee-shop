@@ -14,11 +14,27 @@ router.get("/", async (req, res) => {
 
 router.post("/", async (req, res) => {
   try {
+    const userEmail = ((req.headers["x-user-email"] as string) || req.body?.authorEmail || req.body?.userEmail || "").trim().toLowerCase();
+    const userId = ((req.headers["x-user-id"] as string) || req.body?.authorUid || req.body?.userId || "").trim();
+
+    // Enforce that user must be signed in to leave a review or wall post
+    if (!userEmail && !userId) {
+      return res.status(401).json({
+        error: "Authentication required: You must be signed in to leave a review."
+      });
+    }
+
     const { author, text, rating, image, category } = req.body;
+    if (!text || typeof text !== "string" || !text.trim()) {
+      return res.status(400).json({ error: "Review text is required." });
+    }
+
     const newPost = await addWallPost({
-      author: author || "Coffee Lover",
-      avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=60",
-      text,
+      author: author || userEmail.split("@")[0] || "Coffee Explorer",
+      authorUid: userId || undefined,
+      authorEmail: userEmail || undefined,
+      avatar: req.body?.avatar || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=60",
+      text: text.trim(),
       rating: Number(rating) || 5,
       image,
       category: category || "review"

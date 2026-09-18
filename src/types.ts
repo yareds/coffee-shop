@@ -16,6 +16,8 @@ export interface MenuItem {
 export interface WallPost {
   id: string;
   author: string;
+  authorUid?: string;
+  authorEmail?: string;
   avatar: string;
   text: string;
   rating?: number;
@@ -23,6 +25,7 @@ export interface WallPost {
   date: string;
   likes: number;
   category: 'review' | 'photo' | 'latte-art' | 'story';
+  createdAt?: string;
 }
 
 export interface CoffeeEvent {

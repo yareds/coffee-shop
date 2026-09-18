@@ -41,6 +41,8 @@ export interface CoffeeEvent {
 export interface WallPost {
   id: string;
   author: string;
+  authorUid?: string;
+  authorEmail?: string;
   avatar: string;
   text: string;
   rating: number;
@@ -1396,6 +1398,8 @@ export async function getWallPosts(): Promise<WallPost[]> {
           return {
             id: doc.id,
             author: data.author || "Anonymous",
+            authorUid: data.authorUid || undefined,
+            authorEmail: data.authorEmail || undefined,
             avatar: data.avatar || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=60",
             text: data.text || "",
             rating: Number(data.rating) || 5,
@@ -1419,6 +1423,8 @@ export async function getWallPosts(): Promise<WallPost[]> {
 
 export async function addWallPost(post: {
   author?: string;
+  authorUid?: string;
+  authorEmail?: string;
   avatar?: string;
   text: string;
   rating?: number;
@@ -1431,6 +1437,8 @@ export async function addWallPost(post: {
   const newPost: WallPost = {
     id,
     author: post.author || "Coffee Lover",
+    authorUid: post.authorUid,
+    authorEmail: post.authorEmail,
     avatar: post.avatar || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=60",
     text: post.text,
     rating: post.rating ?? 5,
@@ -1447,6 +1455,8 @@ export async function addWallPost(post: {
     try {
       await COLLECTIONS.communityPosts.doc(id).set({
         author: newPost.author,
+        authorUid: newPost.authorUid || null,
+        authorEmail: newPost.authorEmail || null,
         avatar: newPost.avatar,
         text: newPost.text,
         rating: newPost.rating,

@@ -868,7 +868,11 @@ export default function App() {
               transition={{ duration: 0.3 }}
               className="flex flex-col gap-8"
             >
-              <CommunityWall onPostAdded={handleRewardPoints} />
+              <CommunityWall 
+                onPostAdded={handleRewardPoints} 
+                authUser={authUser}
+                onOpenLogin={() => setIsLoginModalOpen(true)}
+              />
             </motion.div>
           )}
 
