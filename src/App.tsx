@@ -902,8 +902,6 @@ export default function App() {
             Buna celebrates the ancient coffee heritage of Ethiopia. Inspired by the highlands of Kaffa, Sidamo, and Yirgacheffe.
           </p>
           <div className="flex justify-center gap-4 text-[10px] font-mono uppercase tracking-widest mt-2 text-[#42bd6c]">
-            <span>Server-side API Connection: Active</span>
-            <span>•</span>
             <span>Loyalty Version 2.5</span>
             <span>•</span>
             <span>All Rights Reserved</span>
