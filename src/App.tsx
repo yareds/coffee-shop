@@ -18,6 +18,7 @@ import LoginModal from "./components/LoginModal";
 import OwnerDashboard from "./components/OwnerDashboard";
 import { AnimatedCounter } from "./components/AnimatedCounter";
 import BunaLogo from "./components/BunaLogo";
+import HattrickLogoModal from "./components/HattrickLogoModal";
 import { LoyaltyProfile, AuthUser } from "./types";
 import { auth } from "./lib/firebase";
 import { onAuthStateChanged, signOut as fbSignOut } from "firebase/auth";
@@ -109,6 +110,7 @@ export default function App() {
     return { role: 'guest', name: 'Guest Explorer' };
   });
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
+  const [isLogoModalOpen, setIsLogoModalOpen] = useState(false);
 
   // Toast notification state
   const [toastMsg, setToastMsg] = useState<string | null>(null);
@@ -338,6 +340,17 @@ export default function App() {
 
           {/* AUTHENTICATION CONTROLS & GOOGLE SIGN IN */}
           <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
+            {/* Brand Logo & Vector Asset Modal Trigger */}
+            <button
+              type="button"
+              onClick={() => setIsLogoModalOpen(true)}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 sm:px-3 sm:py-1.5 rounded-full bg-black/40 hover:bg-black/70 border border-amber-500/40 text-amber-300 text-xs font-semibold transition-all shadow-sm cursor-pointer shrink-0"
+              title="View & Download Official Hattrick Coffee Vector Logo"
+            >
+              <Sparkles size={13} className="text-amber-400 animate-pulse" />
+              <span className="text-[11px] sm:text-xs">Logo Asset</span>
+            </button>
+
             {/* Mobile "All Menus" trigger button right in header */}
             <button
               type="button"
@@ -895,6 +908,12 @@ export default function App() {
         onClose={() => setIsLoginModalOpen(false)}
         onLoginSuccess={handleLoginSuccess}
         deviceId={getDeviceId()}
+      />
+
+      {/* HATTRICK COFFEE OFFICIAL LOGO & VECTOR ASSET MODAL */}
+      <HattrickLogoModal
+        isOpen={isLogoModalOpen}
+        onClose={() => setIsLogoModalOpen(false)}
       />
 
     </div>

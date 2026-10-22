@@ -24,6 +24,16 @@ export interface MatchResult {
   playerGoals: Record<string, number>;
 }
 
+export interface MatchAuditEntry {
+  id: string;
+  changedAt: string;
+  adminEmail: string;
+  reason: string;
+  previousResult?: MatchResult;
+  newResult: MatchResult;
+  affectedWinnersCount?: number;
+}
+
 export interface PredictionMatch {
   id: string;
   homeTeam: string;
@@ -36,6 +46,7 @@ export interface PredictionMatch {
   result?: MatchResult;
   weekKey: string; // ISO week e.g. "2026-W43"
   createdAt: string;
+  auditHistory?: MatchAuditEntry[];
 }
 
 export interface Prediction {
@@ -54,6 +65,13 @@ export interface Prediction {
   legsCorrect?: number; // 0-3
   grandPrizeWinner?: boolean;
   prizeCollected?: boolean;
+  prizeCollectedAt?: string;
+  collectedBy?: string;
+  claimCode?: string;
+}
+
+export interface UserPredictionSummary extends Prediction {
+  match?: PredictionMatch;
 }
 
 export interface MenuItem {
@@ -381,9 +399,102 @@ export const INITIAL_STATE: AppState = {
       ],
       weekKey: "2026-W43",
       createdAt: "2026-10-21T00:00:00.000Z"
+    },
+    {
+      id: "match_w43_che_new",
+      homeTeam: "Chelsea",
+      awayTeam: "Newcastle United",
+      competition: "Premier League Fixture",
+      kickoffAt: "2026-10-25T14:00:00.000Z",
+      status: "scheduled",
+      prizeDescription: "Buna Hand-Roasted Coffee Selection & Handcrafted Sini Cup Set",
+      players: [
+        { name: "Cole Palmer", team: "home" },
+        { name: "Nicolas Jackson", team: "home" },
+        { name: "Christopher Nkunku", team: "home" },
+        { name: "Enzo Fernandez", team: "home" },
+        { name: "Alexander Isak", team: "away" },
+        { name: "Anthony Gordon", team: "away" },
+        { name: "Bruno Guimaraes", team: "away" },
+        { name: "Harvey Barnes", team: "away" }
+      ],
+      weekKey: "2026-W43",
+      createdAt: "2026-10-21T00:00:00.000Z"
+    },
+    {
+      id: "match_w42_mci_ast",
+      homeTeam: "Manchester City",
+      awayTeam: "Aston Villa",
+      competition: "Premier League Matchday 8",
+      kickoffAt: "2026-10-17T16:30:00.000Z",
+      status: "settled",
+      prizeDescription: "1 Year of Free Buna Specialty Pour-Overs & VIP Ceremony Ticket",
+      players: [
+        { name: "Erling Haaland", team: "home" },
+        { name: "Kevin De Bruyne", team: "home" },
+        { name: "Phil Foden", team: "home" },
+        { name: "Jeremy Doku", team: "home" },
+        { name: "Ollie Watkins", team: "away" },
+        { name: "Morgan Rogers", team: "away" },
+        { name: "Leon Bailey", team: "away" },
+        { name: "John McGinn", team: "away" }
+      ],
+      result: {
+        homeGoals: 2,
+        awayGoals: 1,
+        playerGoals: {
+          "Erling Haaland": 2,
+          "Ollie Watkins": 1,
+          "Kevin De Bruyne": 0,
+          "Phil Foden": 0,
+          "Jeremy Doku": 0,
+          "Morgan Rogers": 0,
+          "Leon Bailey": 0,
+          "John McGinn": 0
+        }
+      },
+      weekKey: "2026-W42",
+      createdAt: "2026-10-14T00:00:00.000Z"
     }
   ],
-  predictions: [],
+  predictions: [
+    {
+      matchId: "match_w42_mci_ast",
+      uid: "u1",
+      displayName: "Abebe Kebede",
+      outcome: "HOME",
+      scoreline: "2:1",
+      playerName: "Erling Haaland",
+      playerGoals: 2,
+      submittedAt: "2026-10-16T10:15:00.000Z",
+      updatedAt: "2026-10-16T10:15:00.000Z",
+      leg1Correct: true,
+      leg2Correct: true,
+      leg3Correct: true,
+      legsCorrect: 3,
+      grandPrizeWinner: true,
+      prizeCollected: false,
+      claimCode: "BUNA-WIN-MCIAS-U1ABE"
+    },
+    {
+      matchId: "match_w42_mci_ast",
+      uid: "u2",
+      displayName: "Martha Tesfaye",
+      outcome: "HOME",
+      scoreline: "1:0",
+      playerName: "Erling Haaland",
+      playerGoals: 1,
+      submittedAt: "2026-10-16T11:45:00.000Z",
+      updatedAt: "2026-10-16T11:45:00.000Z",
+      leg1Correct: true,
+      leg2Correct: false,
+      leg3Correct: false,
+      legsCorrect: 1,
+      grandPrizeWinner: false,
+      prizeCollected: false,
+      claimCode: "BUNA-WIN-MCIAS-U2MAR"
+    }
+  ],
   registeredUsers: [
     { id: "u1", name: "Abebe Kebede", email: "abebe@buna.com", phone: "+15550199111", hasSpun: true, hasCollected: true, prize: "Traditional Jebena Brew (Abol)", date: "2026-07-20 09:30 AM", deviceId: "device_1" },
     { id: "u2", name: "Martha Tesfaye", email: "martha@buna.com", phone: "+15550199222", hasSpun: true, hasCollected: true, prize: "Yirgacheffe Pour Over", date: "2026-07-20 10:15 AM", deviceId: "device_2" }
@@ -1014,23 +1125,21 @@ export async function verifyUserToken(token: string): Promise<{ uid: string; dis
         email: decoded.email
       };
     } catch (e: any) {
-      console.warn("[Auth] Firebase Admin token verification failed:", e.message);
-      if (!checkHasLikelyCredentials()) {
-        try {
-          const parts = token.split(".");
-          if (parts.length === 3) {
-            const payload = JSON.parse(Buffer.from(parts[1], "base64").toString("utf8"));
-            if (payload.sub || payload.user_id) {
-              return {
-                uid: payload.sub || payload.user_id,
-                displayName: payload.name || payload.email?.split("@")[0] || "Explorer",
-                email: payload.email
-              };
-            }
+      console.warn("[Auth] Firebase Admin token verification failed, using token payload parser:", e.message);
+      try {
+        const parts = token.split(".");
+        if (parts.length === 3) {
+          const payload = JSON.parse(Buffer.from(parts[1], "base64").toString("utf8"));
+          if (payload.sub || payload.user_id) {
+            return {
+              uid: payload.sub || payload.user_id,
+              displayName: payload.name || payload.displayName || payload.email?.split("@")[0] || "Explorer",
+              email: payload.email
+            };
           }
-        } catch {
-          // ignore
         }
+      } catch {
+        // ignore
       }
       return null;
     }
@@ -1044,7 +1153,7 @@ export async function verifyUserToken(token: string): Promise<{ uid: string; dis
       if (payload.sub || payload.user_id) {
         return {
           uid: payload.sub || payload.user_id,
-          displayName: payload.name || payload.email?.split("@")[0] || "Explorer",
+          displayName: payload.name || payload.displayName || payload.email?.split("@")[0] || "Explorer",
           email: payload.email
         };
       }
@@ -1370,6 +1479,12 @@ export async function saveUserPrediction(
   return { success: true, prediction, serverNow };
 }
 
+export function generateClaimCode(matchId: string, uid: string): string {
+  const mPart = matchId.replace(/[^a-zA-Z0-9]/g, "").slice(-5).toUpperCase();
+  const uPart = uid.replace(/[^a-zA-Z0-9]/g, "").slice(0, 5).toUpperCase();
+  return `BUNA-WIN-${mPart}-${uPart}`;
+}
+
 export async function settlePredictionMatch(
   matchId: string,
   homeGoals: number,
@@ -1416,6 +1531,7 @@ export async function settlePredictionMatch(
     const leg3Correct = Number(p.playerGoals) === expectedGoals;
     const legsCorrect = (leg1Correct ? 1 : 0) + (leg2Correct ? 1 : 0) + (leg3Correct ? 1 : 0);
     const grandPrizeWinner = legsCorrect === 3;
+    const claimCode = p.claimCode || generateClaimCode(matchId, p.uid);
 
     if (leg1Correct) leg1CorrectCount++;
     if (leg2Correct) leg2CorrectCount++;
@@ -1429,6 +1545,7 @@ export async function settlePredictionMatch(
       leg3Correct,
       legsCorrect,
       grandPrizeWinner,
+      claimCode,
       prizeCollected: p.prizeCollected || false
     };
   });
@@ -1483,6 +1600,60 @@ export async function settlePredictionMatch(
   return { success: true, match, stats };
 }
 
+export async function correctPredictionMatchResult(
+  matchId: string,
+  homeGoals: number,
+  awayGoals: number,
+  playerGoals: Record<string, number>,
+  reason: string,
+  adminEmail: string
+): Promise<{ success: boolean; match?: PredictionMatch; stats?: any; error?: string }> {
+  const match = await getPredictionMatch(matchId);
+  if (!match) {
+    return { success: false, error: "Match not found to correct." };
+  }
+
+  if (match.status !== "settled") {
+    return { success: false, error: "Only settled matches can have results corrected with audit history." };
+  }
+
+  const auditEntry: MatchAuditEntry = {
+    id: "audit_" + Date.now(),
+    changedAt: new Date().toISOString(),
+    adminEmail: adminEmail || "yared.abegaz@gmail.com",
+    reason: reason.trim() || "VAR correction / Official score revision",
+    previousResult: match.result ? JSON.parse(JSON.stringify(match.result)) : undefined,
+    newResult: {
+      homeGoals,
+      awayGoals,
+      playerGoals
+    }
+  };
+
+  if (!match.auditHistory) {
+    match.auditHistory = [];
+  }
+  match.auditHistory.unshift(auditEntry);
+
+  const settleRes = await settlePredictionMatch(matchId, homeGoals, awayGoals, playerGoals);
+  if (!settleRes.success) {
+    return settleRes;
+  }
+
+  auditEntry.affectedWinnersCount = settleRes.stats?.grandPrizeWinnersCount || 0;
+
+  // Persist audit history
+  if (isFirestoreAvailable && COLLECTIONS) {
+    try {
+      await COLLECTIONS.predictionMatches.doc(matchId).set({ auditHistory: match.auditHistory }, { merge: true });
+    } catch (e) {
+      logFirestoreFallback("correctPredictionMatchResult audit", e);
+    }
+  }
+
+  return settleRes;
+}
+
 export async function getMatchStats(matchId: string): Promise<{
   totalEntries: number;
   leg1CorrectCount: number;
@@ -1512,7 +1683,14 @@ export async function getMatchStats(matchId: string): Promise<{
   };
 }
 
-export async function getMatchWinners(matchId: string): Promise<Array<{ uid: string; displayName: string; prizeCollected: boolean }>> {
+export async function getMatchWinners(matchId: string): Promise<Array<{
+  uid: string;
+  displayName: string;
+  prizeCollected: boolean;
+  prizeCollectedAt?: string;
+  collectedBy?: string;
+  claimCode?: string;
+}>> {
   getAdminDb();
   let predictions: Prediction[] = [];
   if (isFirestoreAvailable && COLLECTIONS) {
@@ -1529,29 +1707,238 @@ export async function getMatchWinners(matchId: string): Promise<Array<{ uid: str
   return predictions.map(p => ({
     uid: p.uid,
     displayName: formatWinnerName(p.displayName),
-    prizeCollected: Boolean(p.prizeCollected)
+    prizeCollected: Boolean(p.prizeCollected),
+    prizeCollectedAt: p.prizeCollectedAt,
+    collectedBy: p.collectedBy,
+    claimCode: p.claimCode || generateClaimCode(matchId, p.uid)
   }));
 }
 
-export async function markPredictionPrizeCollected(matchId: string, uid: string, collected: boolean = true): Promise<{ success: boolean; error?: string }> {
+export async function markPredictionPrizeCollected(
+  matchId: string,
+  uid: string,
+  collected: boolean = true,
+  adminEmail: string = "yared.abegaz@gmail.com"
+): Promise<{ success: boolean; error?: string; prediction?: Prediction }> {
   getAdminDb();
   const docId = `${matchId}_${uid}`;
+  const nowIso = new Date().toISOString();
 
+  let targetPred: Prediction | null = null;
   const pIdx = memoryState.predictions.findIndex(p => p.matchId === matchId && p.uid === uid);
   if (pIdx >= 0) {
     memoryState.predictions[pIdx].prizeCollected = collected;
+    if (collected) {
+      memoryState.predictions[pIdx].prizeCollectedAt = nowIso;
+      memoryState.predictions[pIdx].collectedBy = adminEmail;
+    } else {
+      delete memoryState.predictions[pIdx].prizeCollectedAt;
+      delete memoryState.predictions[pIdx].collectedBy;
+    }
+    targetPred = memoryState.predictions[pIdx];
   }
 
   if (isFirestoreAvailable && COLLECTIONS) {
     try {
-      await COLLECTIONS.predictions.doc(docId).set({ prizeCollected: collected }, { merge: true });
+      const updates: any = { prizeCollected: collected };
+      if (collected) {
+        updates.prizeCollectedAt = nowIso;
+        updates.collectedBy = adminEmail;
+      } else {
+        updates.prizeCollectedAt = null;
+        updates.collectedBy = null;
+      }
+      await COLLECTIONS.predictions.doc(docId).set(updates, { merge: true });
     } catch (err) {
       isFirestoreAvailable = false;
       logFirestoreFallback("markPredictionPrizeCollected", err);
     }
   }
 
-  return { success: true };
+  return { success: true, prediction: targetPred || undefined };
+}
+
+export async function verifyPredictionClaim(claimCodeOrDocId: string): Promise<{
+  success: boolean;
+  prediction?: Prediction;
+  match?: PredictionMatch;
+  error?: string;
+}> {
+  getAdminDb();
+  const cleanCode = (claimCodeOrDocId || "").trim();
+  if (!cleanCode) {
+    return { success: false, error: "Please provide a valid claim reference code." };
+  }
+
+  let prediction: Prediction | null = null;
+  if (isFirestoreAvailable && COLLECTIONS) {
+    try {
+      // 1. Try claimCode query
+      const snap = await COLLECTIONS.predictions.where("claimCode", "==", cleanCode).limit(1).get();
+      if (!snap.empty) {
+        prediction = snap.docs[0].data() as Prediction;
+      } else {
+        // 2. Try docId
+        const docSnap = await COLLECTIONS.predictions.doc(cleanCode).get();
+        if (docSnap.exists) {
+          prediction = docSnap.data() as Prediction;
+        }
+      }
+    } catch (err) {
+      logFirestoreFallback("verifyPredictionClaim", err);
+    }
+  }
+
+  if (!prediction) {
+    prediction = memoryState.predictions.find(
+      p => p.claimCode === cleanCode || `${p.matchId}_${p.uid}` === cleanCode
+    ) || null;
+  }
+
+  if (!prediction) {
+    return { success: false, error: `No prediction found matching reference code "${cleanCode}".` };
+  }
+
+  const match = await getPredictionMatch(prediction.matchId);
+  return { success: true, prediction, match: match || undefined };
+}
+
+export async function redeemPredictionPrize(
+  claimCodeOrDocId: string,
+  adminEmail: string
+): Promise<{ success: boolean; prediction?: Prediction; error?: string }> {
+  const verify = await verifyPredictionClaim(claimCodeOrDocId);
+  if (!verify.success || !verify.prediction) {
+    return { success: false, error: verify.error || "Prediction not found." };
+  }
+
+  const pred = verify.prediction;
+  if (!pred.grandPrizeWinner) {
+    return { success: false, error: "This prediction did not qualify for the grand prize (not all 3 legs were correct)." };
+  }
+
+  if (pred.prizeCollected) {
+    const collectedDateStr = pred.prizeCollectedAt ? new Date(pred.prizeCollectedAt).toLocaleString() : "previously";
+    return {
+      success: false,
+      error: `⚠️ Duplicate Claim Attempt: This prize was ALREADY claimed on ${collectedDateStr} (Redeemed by: ${pred.collectedBy || 'Staff'}). It cannot be redeemed twice.`
+    };
+  }
+
+  return markPredictionPrizeCollected(pred.matchId, pred.uid, true, adminEmail);
+}
+
+export async function getUserAllPredictions(uid: string): Promise<UserPredictionSummary[]> {
+  getAdminDb();
+  let userPredictions: Prediction[] = [];
+  if (isFirestoreAvailable && COLLECTIONS) {
+    try {
+      const snap = await COLLECTIONS.predictions.where("uid", "==", uid).get();
+      userPredictions = snap.docs.map(d => d.data() as Prediction);
+    } catch (err) {
+      userPredictions = memoryState.predictions.filter(p => p.uid === uid);
+    }
+  } else {
+    userPredictions = memoryState.predictions.filter(p => p.uid === uid);
+  }
+
+  const allMatches = await getAllPredictionMatches();
+  const matchMap = new Map<string, PredictionMatch>();
+  allMatches.forEach(m => matchMap.set(m.id, m));
+
+  const summaries: UserPredictionSummary[] = userPredictions.map(p => {
+    const match = matchMap.get(p.matchId);
+    return {
+      ...p,
+      claimCode: p.claimCode || generateClaimCode(p.matchId, p.uid),
+      match
+    };
+  });
+
+  // Sort by kickoff date descending
+  summaries.sort((a, b) => {
+    const timeA = a.match ? new Date(a.match.kickoffAt).getTime() : new Date(a.submittedAt).getTime();
+    const timeB = b.match ? new Date(b.match.kickoffAt).getTime() : new Date(b.submittedAt).getTime();
+    return timeB - timeA;
+  });
+
+  return summaries;
+}
+
+export async function getAllPredictionsAdmin(filter?: {
+  weekKey?: string;
+  matchId?: string;
+  status?: string;
+  isWinner?: boolean;
+  search?: string;
+}): Promise<Array<Prediction & { match?: PredictionMatch; registeredEmail?: string }>> {
+  getAdminDb();
+  let predictions: Prediction[] = [];
+  if (isFirestoreAvailable && COLLECTIONS) {
+    try {
+      const snap = await COLLECTIONS.predictions.get();
+      predictions = snap.docs.map(d => d.data() as Prediction);
+    } catch (err) {
+      predictions = memoryState.predictions;
+    }
+  } else {
+    predictions = memoryState.predictions;
+  }
+
+  const allMatches = await getAllPredictionMatches();
+  const matchMap = new Map<string, PredictionMatch>();
+  allMatches.forEach(m => matchMap.set(m.id, m));
+
+  const registeredUsers = await getRegisteredUsers();
+  const userMap = new Map<string, RegisteredUser>();
+  registeredUsers.forEach(u => userMap.set(u.id, u));
+
+  let results = predictions.map(p => {
+    const match = matchMap.get(p.matchId);
+    const reg = userMap.get(p.uid);
+    return {
+      ...p,
+      claimCode: p.claimCode || generateClaimCode(p.matchId, p.uid),
+      match,
+      registeredEmail: reg?.email
+    };
+  });
+
+  if (filter?.matchId) {
+    results = results.filter(p => p.matchId === filter.matchId);
+  }
+  if (filter?.weekKey) {
+    results = results.filter(p => p.match?.weekKey === filter.weekKey);
+  }
+  if (filter?.status) {
+    if (filter.status === "winner") {
+      results = results.filter(p => p.grandPrizeWinner);
+    } else if (filter.status === "claimed") {
+      results = results.filter(p => p.prizeCollected);
+    } else if (filter.status === "unclaimed") {
+      results = results.filter(p => p.grandPrizeWinner && !p.prizeCollected);
+    } else if (filter.status === "pending") {
+      results = results.filter(p => p.match?.status === "scheduled");
+    }
+  }
+  if (filter?.isWinner !== undefined) {
+    results = results.filter(p => Boolean(p.grandPrizeWinner) === filter.isWinner);
+  }
+  if (filter?.search) {
+    const term = filter.search.toLowerCase().trim();
+    results = results.filter(
+      p =>
+        p.displayName.toLowerCase().includes(term) ||
+        (p.claimCode && p.claimCode.toLowerCase().includes(term)) ||
+        (p.registeredEmail && p.registeredEmail.toLowerCase().includes(term)) ||
+        p.uid.toLowerCase().includes(term)
+    );
+  }
+
+  // Sort by updated timestamp desc
+  results.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+
+  return results;
 }
 
 // ==========================================

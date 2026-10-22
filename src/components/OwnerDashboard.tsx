@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from "react";
 import { 
   Shield, Sparkles, RefreshCw, CheckCircle2, TrendingUp, Users, Tag, Award, 
-  Plus, Trash2, Eye, EyeOff, Trophy, Calendar, AlertTriangle, Check, X, Clock
+  Plus, Trash2, Eye, EyeOff, Trophy, Calendar, AlertTriangle, Check, X, Clock,
+  Filter, Search, QrCode, FileText, History, ArrowRight
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
+import { MatchAuditEntry } from "../types";
 
 interface MatchPlayer {
   name: string;
@@ -15,8 +17,26 @@ export default function OwnerDashboard() {
   const [users, setUsers] = useState<any[]>([]);
   const [matches, setMatches] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeSubTab, setActiveSubTab] = useState<'overview' | 'promotions' | 'predictions' | 'users'>('overview');
+  const [activeSubTab, setActiveSubTab] = useState<'overview' | 'promotions' | 'predictions' | 'users'>('predictions');
   
+  // Predictions sub-view: "matches" | "customer_predictions" | "verify_claim"
+  const [predictionView, setPredictionView] = useState<'matches' | 'customer_predictions' | 'verify_claim'>('matches');
+
+  // All Customer Predictions list state
+  const [allPredictions, setAllPredictions] = useState<any[]>([]);
+  const [loadingPredictions, setLoadingPredictions] = useState(false);
+  const [predFilterMatch, setPredFilterMatch] = useState("");
+  const [predFilterWeek, setPredFilterWeek] = useState("");
+  const [predFilterStatus, setPredFilterStatus] = useState("all");
+  const [predSearchTerm, setPredSearchTerm] = useState("");
+
+  // Claim code verification state
+  const [claimInput, setClaimInput] = useState("");
+  const [verifyingClaim, setVerifyingClaim] = useState(false);
+  const [claimResult, setClaimResult] = useState<any | null>(null);
+  const [claimError, setClaimError] = useState<string | null>(null);
+  const [redeemingClaim, setRedeemingClaim] = useState(false);
+
   // Promotions form state
   const [promoName, setPromoName] = useState("");
   const [promoDiscount, setPromoDiscount] = useState("");
@@ -35,12 +55,15 @@ export default function OwnerDashboard() {
   ]);
   const [saturdayWarning, setSaturdayWarning] = useState<string | null>(null);
 
-  // Settlement state
+  // Settlement & Correction state
   const [settlingMatch, setSettlingMatch] = useState<any | null>(null);
   const [settleHomeGoals, setSettleHomeGoals] = useState(0);
   const [settleAwayGoals, setSettleAwayGoals] = useState(0);
   const [settlePlayerGoals, setSettlePlayerGoals] = useState<Record<string, number>>({});
+  const [isCorrectionMode, setIsCorrectionMode] = useState(false);
+  const [correctionReason, setCorrectionReason] = useState("");
 
+  const [expandedAuditMatchId, setExpandedAuditMatchId] = useState<string | null>(null);
   const [actionMsg, setActionMsg] = useState<string | null>(null);
 
   const getAdminHeaders = () => {
@@ -49,7 +72,8 @@ export default function OwnerDashboard() {
     return {
       "Content-Type": "application/json",
       "X-Admin-Token": token,
-      "X-Admin-Pin": pin
+      "X-Admin-Pin": pin,
+      "X-Admin-Email": "yared.abegaz@gmail.com"
     };
   };
 
@@ -87,16 +111,41 @@ export default function OwnerDashboard() {
       .catch(e => console.error("Error fetching matches:", e));
   };
 
+  const loadAllPredictions = () => {
+    setLoadingPredictions(true);
+    const headers = getAdminHeaders();
+    const query = new URLSearchParams();
+    if (predFilterMatch) query.set("matchId", predFilterMatch);
+    if (predFilterWeek) query.set("weekKey", predFilterWeek);
+    if (predFilterStatus && predFilterStatus !== "all") query.set("status", predFilterStatus);
+    if (predSearchTerm) query.set("search", predSearchTerm);
+
+    fetch(`/api/owner/predictions/all?${query.toString()}`, { headers })
+      .then(res => res.json())
+      .then(data => {
+        if (data?.predictions) {
+          setAllPredictions(data.predictions);
+        }
+      })
+      .catch(e => console.error("Error fetching all predictions:", e))
+      .finally(() => setLoadingPredictions(false));
+  };
+
   useEffect(() => {
     loadDashboardData();
   }, []);
+
+  useEffect(() => {
+    if (activeSubTab === "predictions" && predictionView === "customer_predictions") {
+      loadAllPredictions();
+    }
+  }, [activeSubTab, predictionView, predFilterMatch, predFilterWeek, predFilterStatus, predSearchTerm]);
 
   const showFeedback = (msg: string) => {
     setActionMsg(msg);
     setTimeout(() => setActionMsg(null), 4500);
   };
 
-  // Check Saturday warning whenever kickoff date changes
   const handleKickoffChange = (val: string) => {
     setKickoffDateTime(val);
     if (!val) {
@@ -105,9 +154,8 @@ export default function OwnerDashboard() {
     }
     const d = new Date(val);
     if (!isNaN(d.getTime())) {
-      // 6 is Saturday
       if (d.getDay() !== 6) {
-        setSaturdayWarning("Notice: The chosen kickoff date is not on a Saturday. Entering is allowed, but football showcase matches are typically Saturday.");
+        setSaturdayWarning("Notice: The kickoff date is not on a Saturday. Entering is allowed, but Premier showcase games are typically Saturday.");
       } else {
         setSaturdayWarning(null);
       }
@@ -142,7 +190,6 @@ export default function OwnerDashboard() {
       return;
     }
 
-    // Convert local input to UTC ISO string
     const kickoffUtc = new Date(kickoffDateTime).toISOString();
 
     fetch("/api/owner/predictions/matches", {
@@ -188,7 +235,6 @@ export default function OwnerDashboard() {
     setHomeTeam(m.homeTeam);
     setAwayTeam(m.awayTeam);
     setCompetition(m.competition || "Premier Matchday");
-    // Format to YYYY-MM-DDTHH:mm for datetime-local
     try {
       const d = new Date(m.kickoffAt);
       const localIso = new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
@@ -220,8 +266,10 @@ export default function OwnerDashboard() {
       .catch(e => console.error(e));
   };
 
-  const handleOpenSettle = (m: any) => {
+  const handleOpenSettle = (m: any, isCorrection: boolean = false) => {
     setSettlingMatch(m);
+    setIsCorrectionMode(isCorrection);
+    setCorrectionReason("");
     setSettleHomeGoals(m.result?.homeGoals ?? 0);
     setSettleAwayGoals(m.result?.awayGoals ?? 0);
     const initialPlayerGoals: Record<string, number> = {};
@@ -234,15 +282,21 @@ export default function OwnerDashboard() {
   const handleExecuteSettle = () => {
     if (!settlingMatch) return;
 
-    fetch("/api/owner/predictions/settle", {
+    const endpoint = isCorrectionMode ? "/api/owner/predictions/correct-result" : "/api/owner/predictions/settle";
+    const body: any = {
+      matchId: settlingMatch.id,
+      homeGoals: settleHomeGoals,
+      awayGoals: settleAwayGoals,
+      playerGoals: settlePlayerGoals
+    };
+    if (isCorrectionMode) {
+      body.reason = correctionReason || "VAR revision / Score adjustment";
+    }
+
+    fetch(endpoint, {
       method: "POST",
       headers: getAdminHeaders(),
-      body: JSON.stringify({
-        matchId: settlingMatch.id,
-        homeGoals: settleHomeGoals,
-        awayGoals: settleAwayGoals,
-        playerGoals: settlePlayerGoals
-      })
+      body: JSON.stringify(body)
     })
       .then(res => res.json())
       .then(data => {
@@ -250,13 +304,14 @@ export default function OwnerDashboard() {
           showFeedback(data.message || "Match settled successfully!");
           setSettlingMatch(null);
           loadDashboardData();
+          if (predictionView === "customer_predictions") loadAllPredictions();
         } else {
           showFeedback(data.error || "Failed to settle match.");
         }
       })
       .catch(e => {
         console.error(e);
-        showFeedback("Error settling match.");
+        showFeedback("Error executing settlement.");
       });
   };
 
@@ -271,646 +326,939 @@ export default function OwnerDashboard() {
         if (data.success) {
           showFeedback("Prize collected status updated.");
           loadDashboardData();
+          if (predictionView === "customer_predictions") loadAllPredictions();
         }
       })
       .catch(e => console.error(e));
   };
 
-  const handleTogglePromo = (promoId: string) => {
-    fetch("/api/owner/promotions", {
-      method: "POST",
-      headers: getAdminHeaders(),
-      body: JSON.stringify({ action: "toggle", promoId })
-    })
-      .then(res => res.json())
-      .then(data => {
-        if (data?.promotions) {
-          setStats((prev: any) => ({ ...prev, promotions: data.promotions }));
-          showFeedback("Promotion status updated.");
-        }
-      })
-      .catch(e => console.error(e));
-  };
-
-  const handleAddPromo = (e: React.FormEvent) => {
+  // Verify Claim Code
+  const handleVerifyClaimCode = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!promoName.trim()) return;
+    if (!claimInput.trim()) return;
+    setVerifyingClaim(true);
+    setClaimError(null);
+    setClaimResult(null);
 
-    fetch("/api/owner/promotions", {
+    fetch("/api/owner/predictions/verify-claim", {
       method: "POST",
       headers: getAdminHeaders(),
-      body: JSON.stringify({
-        action: "add",
-        name: promoName.trim(),
-        discount: promoDiscount.trim() || "15% OFF",
-        desc: promoDesc.trim() || "Special barista promotion"
-      })
+      body: JSON.stringify({ claimCode: claimInput.trim() })
     })
       .then(res => res.json())
       .then(data => {
-        if (data?.promotions) {
-          setStats((prev: any) => ({ ...prev, promotions: data.promotions }));
-          setPromoName("");
-          setPromoDiscount("");
-          setPromoDesc("");
-          showFeedback("New promotion published!");
+        if (data.success) {
+          setClaimResult(data);
+        } else {
+          setClaimError(data.error || "No winning prediction found matching this code.");
         }
       })
-      .catch(e => console.error(e));
+      .catch(e => {
+        console.error(e);
+        setClaimError("Network error verifying claim code.");
+      })
+      .finally(() => setVerifyingClaim(false));
   };
 
-  const handleDeletePromo = (promoId: string) => {
-    fetch("/api/owner/promotions", {
+  // Confirm Prize Redemption
+  const handleConfirmRedemption = () => {
+    if (!claimResult?.prediction?.claimCode) return;
+    setRedeemingClaim(true);
+
+    fetch("/api/owner/predictions/redeem-prize", {
       method: "POST",
       headers: getAdminHeaders(),
-      body: JSON.stringify({ action: "delete", promoId })
+      body: JSON.stringify({ claimCode: claimResult.prediction.claimCode })
     })
       .then(res => res.json())
       .then(data => {
-        if (data?.promotions) {
-          setStats((prev: any) => ({ ...prev, promotions: data.promotions }));
-          showFeedback("Promotion removed.");
+        if (data.success) {
+          showFeedback("🎉 Prize marked as claimed! Redemption timestamp recorded.");
+          setClaimResult((prev: any) => ({
+            ...prev,
+            prediction: {
+              ...prev.prediction,
+              prizeCollected: true,
+              prizeCollectedAt: new Date().toISOString(),
+              collectedBy: "yared.abegaz@gmail.com"
+            }
+          }));
+          loadDashboardData();
+        } else {
+          showFeedback(data.error || "Failed to redeem prize.");
         }
       })
-      .catch(e => console.error(e));
+      .catch(e => {
+        console.error(e);
+        showFeedback("Error redeeming prize.");
+      })
+      .finally(() => setRedeemingClaim(false));
   };
 
   return (
-    <div id="owner-dashboard" className="bg-[#1a3e29] p-6 rounded-2xl border border-[#295a3d] flex flex-col gap-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#295a3d]">
-        <div className="flex items-center gap-3">
-          <div className="h-10 w-10 rounded-xl bg-amber-500/10 border border-amber-600/30 flex items-center justify-center text-amber-400">
-            <Shield size={20} />
+    <div className="flex flex-col gap-6">
+      
+      {/* Dashboard Header */}
+      <div className="bg-[#1a3e29] p-6 rounded-2xl border border-[#295a3d] flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <span className="px-2.5 py-0.5 rounded-full bg-amber-400/20 text-amber-300 border border-amber-400/40 text-[10px] font-mono font-bold uppercase">
+              ADMIN CONTROL PANEL
+            </span>
+            <span className="text-xs font-mono text-stone-300">Staff Operations</span>
           </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h2 className="text-xl font-bold text-white tracking-tight">Admin & Store Operations</h2>
-              <span className="px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-600/30 text-amber-400 text-[10px] font-mono uppercase font-bold">
-                Google Verified Admin
-              </span>
-            </div>
-            <p className="text-xs text-stone-400 font-mono">
-              Authenticated Admin: yared.abegaz@gmail.com
-            </p>
-          </div>
+          <h2 className="text-2xl font-bold font-serif-display text-white tracking-tight">
+            Buna Cafe & Matchday Management
+          </h2>
+          <p className="text-xs text-stone-300 mt-0.5">
+            Manage Premier League prediction matches, customer entries, prize vouchers, and results settlement.
+          </p>
         </div>
 
-        <button
-          onClick={loadDashboardData}
-          disabled={loading}
-          className="px-3.5 py-2 rounded-xl bg-[#224e38] hover:bg-[#295a3d] border border-[#295a3d] text-stone-200 text-xs font-medium transition-all flex items-center gap-2 self-start sm:self-auto cursor-pointer"
-        >
-          <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
-          <span>Refresh Metrics</span>
-        </button>
+        {/* SubTab switcher */}
+        <div className="flex flex-wrap gap-2 text-xs font-mono">
+          <button
+            type="button"
+            onClick={() => setActiveSubTab('predictions')}
+            className={`px-3 py-1.5 rounded-xl font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+              activeSubTab === 'predictions'
+                ? 'bg-amber-400 text-stone-950 shadow-md font-black'
+                : 'bg-[#122b1c] text-stone-200 border border-[#295a3d]'
+            }`}
+          >
+            <Trophy size={14} />
+            <span>Weekly Predictions</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveSubTab('users')}
+            className={`px-3 py-1.5 rounded-xl font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+              activeSubTab === 'users'
+                ? 'bg-[#2d824d] text-white shadow-md'
+                : 'bg-[#122b1c] text-stone-200 border border-[#295a3d]'
+            }`}
+          >
+            <Users size={14} />
+            <span>Customer Accounts</span>
+          </button>
+        </div>
       </div>
 
       {actionMsg && (
-        <div className="p-3 rounded-xl bg-[#2d824d]/20 border border-[#2d824d]/40 text-emerald-300 text-xs font-medium flex items-center gap-2">
-          <CheckCircle2 size={16} />
+        <div className="p-3.5 rounded-xl bg-amber-400/20 border border-amber-400/40 text-amber-200 text-xs font-mono font-bold flex items-center gap-2">
+          <Sparkles size={15} />
           <span>{actionMsg}</span>
         </div>
       )}
 
-      {/* Sub-tab navigation */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
-        {[
-          { id: 'overview', label: 'Store Overview', icon: TrendingUp },
-          { id: 'promotions', label: 'Promotions', icon: Tag },
-          { id: 'predictions', label: 'Weekly Predictions', icon: Trophy },
-          { id: 'users', label: 'Customer Profiles', icon: Users }
-        ].map((tab) => {
-          const Icon = tab.icon;
-          return (
-            <button
-              key={tab.id}
-              onClick={() => setActiveSubTab(tab.id as any)}
-              className={`px-4 py-2 rounded-xl text-xs font-semibold transition-all flex items-center gap-2 whitespace-nowrap cursor-pointer ${
-                activeSubTab === tab.id
-                  ? "bg-[#2d824d] text-white shadow-md"
-                  : "bg-[#122b1c] text-stone-300 hover:text-white border border-[#295a3d]"
-              }`}
-            >
-              <Icon size={14} />
-              <span>{tab.label}</span>
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Tab 1: Overview */}
-      {activeSubTab === 'overview' && (
-        <div className="flex flex-col gap-6">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="bg-[#122b1c] p-4 rounded-xl border border-[#295a3d]">
-              <span className="text-xs text-stone-400 font-mono">Gross Coffee Revenue</span>
-              <p className="text-2xl font-bold text-white mt-1">
-                ${stats?.shopStats?.totalRevenue?.toFixed(2) || "4,820.00"}
-              </p>
-              <span className="text-[10px] text-emerald-400 font-mono">↑ 18.4% this month</span>
-            </div>
-
-            <div className="bg-[#122b1c] p-4 rounded-xl border border-[#295a3d]">
-              <span className="text-xs text-stone-400 font-mono">Total Orders Processed</span>
-              <p className="text-2xl font-bold text-white mt-1">
-                {stats?.shopStats?.totalOrders || "342"}
-              </p>
-              <span className="text-[10px] text-stone-400 font-mono">Real-time count</span>
-            </div>
-
-            <div className="bg-[#122b1c] p-4 rounded-xl border border-[#295a3d]">
-              <span className="text-xs text-stone-400 font-mono">Active Prediction Matches</span>
-              <p className="text-2xl font-bold text-[#e8b584] mt-1">
-                {matches.filter(m => m.status === "scheduled").length}
-              </p>
-              <span className="text-[10px] text-emerald-400 font-mono">Football games live</span>
-            </div>
-
-            <div className="bg-[#122b1c] p-4 rounded-xl border border-[#295a3d]">
-              <span className="text-xs text-stone-400 font-mono">Registered Customers</span>
-              <p className="text-2xl font-bold text-white mt-1">
-                {users.length || "48"}
-              </p>
-              <span className="text-[10px] text-emerald-400 font-mono">Google & Passport members</span>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Tab 2: Promotions */}
-      {activeSubTab === 'promotions' && (
-        <div className="flex flex-col gap-6">
-          <form onSubmit={handleAddPromo} className="bg-[#122b1c] p-4 rounded-xl border border-[#295a3d] flex flex-col sm:flex-row items-end gap-3">
-            <div className="w-full sm:flex-1 flex flex-col gap-1">
-              <label className="text-xs text-stone-300 font-medium">Promo Title</label>
-              <input
-                type="text"
-                value={promoName}
-                onChange={e => setPromoName(e.target.value)}
-                placeholder="e.g. Ethiopian New Year Buna"
-                className="w-full px-3 py-2 rounded-lg bg-[#1a3e29] border border-[#295a3d] text-xs text-white placeholder:text-stone-500 focus:outline-none focus:border-[#42bd6c]"
-                required
-              />
-            </div>
-            <div className="w-full sm:w-36 flex flex-col gap-1">
-              <label className="text-xs text-stone-300 font-medium">Discount Label</label>
-              <input
-                type="text"
-                value={promoDiscount}
-                onChange={e => setPromoDiscount(e.target.value)}
-                placeholder="e.g. 20% OFF"
-                className="w-full px-3 py-2 rounded-lg bg-[#1a3e29] border border-[#295a3d] text-xs text-white placeholder:text-stone-500 focus:outline-none focus:border-[#42bd6c]"
-              />
-            </div>
-            <div className="w-full sm:flex-1 flex flex-col gap-1">
-              <label className="text-xs text-stone-300 font-medium">Description</label>
-              <input
-                type="text"
-                value={promoDesc}
-                onChange={e => setPromoDesc(e.target.value)}
-                placeholder="e.g. Matchday Buna pour-over special"
-                className="w-full px-3 py-2 rounded-lg bg-[#1a3e29] border border-[#295a3d] text-xs text-white placeholder:text-stone-500 focus:outline-none focus:border-[#42bd6c]"
-              />
-            </div>
-            <button
-              type="submit"
-              className="w-full sm:w-auto px-4 py-2 rounded-lg bg-[#2d824d] hover:bg-[#226a3f] text-white text-xs font-bold transition-all flex items-center justify-center gap-1.5 shrink-0 cursor-pointer"
-            >
-              <Plus size={15} />
-              <span>Add Promo</span>
-            </button>
-          </form>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {stats?.promotions?.map((p: any) => (
-              <div key={p.id} className="p-4 rounded-xl bg-[#122b1c] border border-[#295a3d] flex items-center justify-between gap-3">
-                <div className="flex flex-col">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-bold text-white">{p.name}</span>
-                    <span className="px-2 py-0.5 rounded-full bg-[#42bd6c]/20 text-[#42bd6c] text-[10px] font-mono font-bold">
-                      {p.discount}
-                    </span>
-                  </div>
-                  <p className="text-xs text-stone-400 mt-1">{p.desc}</p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => handleTogglePromo(p.id)}
-                    title={p.active ? "Deactivate promo" : "Activate promo"}
-                    className={`p-2 rounded-lg border text-xs font-medium transition-all cursor-pointer ${
-                      p.active
-                        ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20"
-                        : "bg-stone-800 border-stone-700 text-stone-400 hover:bg-stone-700"
-                    }`}
-                  >
-                    {p.active ? <Eye size={15} /> : <EyeOff size={15} />}
-                  </button>
-                  <button
-                    onClick={() => handleDeletePromo(p.id)}
-                    title="Delete promo"
-                    className="p-2 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 hover:bg-red-500/20 text-xs transition-all cursor-pointer"
-                  >
-                    <Trash2 size={15} />
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Tab 3: Predictions Management (Replaces Raffle) */}
+      {/* ======================================================== */}
+      {/* SECTION: WEEKLY PREDICTIONS & COUNTER VERIFICATION */}
+      {/* ======================================================== */}
       {activeSubTab === 'predictions' && (
         <div className="flex flex-col gap-6">
-          {/* Match Creation / Edit Card */}
-          <form onSubmit={handleSaveMatch} className="bg-[#122b1c] p-5 rounded-xl border border-[#295a3d] flex flex-col gap-4">
-            <div className="flex items-center justify-between pb-2 border-b border-[#295a3d]">
-              <div className="flex items-center gap-2">
-                <Trophy size={16} className="text-[#42bd6c]" />
-                <h4 className="text-sm font-bold text-white">
-                  {editingMatchId ? "Edit Scheduled Match" : "Create Featured Match of the Week"}
-                </h4>
-              </div>
-              {editingMatchId && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEditingMatchId(null);
-                    setHomeTeam("");
-                    setAwayTeam("");
-                    setKickoffDateTime("");
-                  }}
-                  className="text-xs text-stone-400 hover:text-white"
-                >
-                  Cancel Edit
-                </button>
-              )}
-            </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              <div>
-                <label className="text-[11px] text-stone-300 font-medium">Home Team Name</label>
-                <input
-                  type="text"
-                  placeholder="e.g. Arsenal"
-                  value={homeTeam}
-                  onChange={e => setHomeTeam(e.target.value)}
-                  className="w-full mt-1 px-3 py-2 rounded-lg bg-[#1a3e29] border border-[#295a3d] text-xs text-white focus:outline-none focus:border-[#42bd6c]"
-                  required
-                />
-              </div>
+          {/* Top Prediction Sub-Tabs */}
+          <div className="flex flex-wrap items-center justify-between gap-3 bg-[#122b1c] p-2 rounded-xl border border-[#295a3d] text-xs font-mono">
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => setPredictionView('matches')}
+                className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
+                  predictionView === 'matches'
+                    ? 'bg-[#2d824d] text-white'
+                    : 'text-stone-300 hover:text-white'
+                }`}
+              >
+                1. Match Fixtures & Settlement
+              </button>
 
-              <div>
-                <label className="text-[11px] text-stone-300 font-medium">Away Team Name</label>
-                <input
-                  type="text"
-                  placeholder="e.g. Liverpool"
-                  value={awayTeam}
-                  onChange={e => setAwayTeam(e.target.value)}
-                  className="w-full mt-1 px-3 py-2 rounded-lg bg-[#1a3e29] border border-[#295a3d] text-xs text-white focus:outline-none focus:border-[#42bd6c]"
-                  required
-                />
-              </div>
+              <button
+                type="button"
+                onClick={() => setPredictionView('customer_predictions')}
+                className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
+                  predictionView === 'customer_predictions'
+                    ? 'bg-[#2d824d] text-white'
+                    : 'text-stone-300 hover:text-white'
+                }`}
+              >
+                2. Customer Submissions Browser
+              </button>
 
-              <div>
-                <label className="text-[11px] text-stone-300 font-medium">Competition / Showcase</label>
-                <input
-                  type="text"
-                  placeholder="e.g. Premier Matchday"
-                  value={competition}
-                  onChange={e => setCompetition(e.target.value)}
-                  className="w-full mt-1 px-3 py-2 rounded-lg bg-[#1a3e29] border border-[#295a3d] text-xs text-white focus:outline-none focus:border-[#42bd6c]"
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div>
-                <div className="flex items-center justify-between">
-                  <label className="text-[11px] text-stone-300 font-medium">Kickoff Date & Time (Local)</label>
-                  <span className="text-[10px] font-mono text-stone-400">Stored in UTC</span>
-                </div>
-                <input
-                  type="datetime-local"
-                  value={kickoffDateTime}
-                  onChange={e => handleKickoffChange(e.target.value)}
-                  className="w-full mt-1 px-3 py-2 rounded-lg bg-[#1a3e29] border border-[#295a3d] text-xs text-white focus:outline-none focus:border-[#42bd6c]"
-                  required
-                />
-                {saturdayWarning && (
-                  <p className="text-[11px] text-amber-400 mt-1 flex items-center gap-1 font-mono">
-                    <AlertTriangle size={12} /> {saturdayWarning}
-                  </p>
-                )}
-              </div>
-
-              <div>
-                <label className="text-[11px] text-stone-300 font-medium">Grand Prize Description</label>
-                <input
-                  type="text"
-                  placeholder="e.g. 1 Year Free Buna Beans & Leather Ball"
-                  value={prizeDesc}
-                  onChange={e => setPrizeDesc(e.target.value)}
-                  className="w-full mt-1 px-3 py-2 rounded-lg bg-[#1a3e29] border border-[#295a3d] text-xs text-white focus:outline-none focus:border-[#42bd6c]"
-                  required
-                />
-              </div>
-            </div>
-
-            {/* Player Roster for Leg 3 Selection */}
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <label className="text-[11px] text-stone-300 font-medium">
-                  Selectable Player Roster (Users pick 1 player for Leg 3)
-                </label>
-                <button
-                  type="button"
-                  onClick={handleAddPlayer}
-                  className="text-xs text-[#42bd6c] hover:underline flex items-center gap-1 cursor-pointer"
-                >
-                  <Plus size={13} /> Add Player
-                </button>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                {playersList.map((player, idx) => (
-                  <div key={idx} className="flex items-center gap-1.5 p-1.5 rounded-lg bg-[#1a3e29] border border-[#295a3d]">
-                    <input
-                      type="text"
-                      placeholder="Player Name (e.g. Saka)"
-                      value={player.name}
-                      onChange={e => handlePlayerChange(idx, "name", e.target.value)}
-                      className="flex-1 px-2 py-1 bg-transparent text-xs text-white focus:outline-none"
-                    />
-                    <select
-                      value={player.team}
-                      onChange={e => handlePlayerChange(idx, "team", e.target.value as any)}
-                      className="bg-[#122b1c] text-[10px] text-stone-300 rounded px-1.5 py-1 border border-[#295a3d] focus:outline-none"
-                    >
-                      <option value="home">Home</option>
-                      <option value="away">Away</option>
-                    </select>
-                    <button
-                      type="button"
-                      onClick={() => handleRemovePlayer(idx)}
-                      className="text-stone-400 hover:text-red-400 p-1"
-                    >
-                      <X size={13} />
-                    </button>
-                  </div>
-                ))}
-              </div>
+              <button
+                type="button"
+                onClick={() => setPredictionView('verify_claim')}
+                className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                  predictionView === 'verify_claim'
+                    ? 'bg-amber-400 text-stone-950 font-black'
+                    : 'text-amber-300 hover:text-amber-200'
+                }`}
+              >
+                <QrCode size={13} />
+                <span>3. Verify & Redeem Prize Code</span>
+              </button>
             </div>
 
             <button
-              type="submit"
-              className="self-start px-5 py-2.5 rounded-xl bg-[#2d824d] hover:bg-[#226a3f] text-white text-xs font-bold transition-all shadow-md shadow-emerald-950/20 flex items-center gap-2 cursor-pointer"
+              type="button"
+              onClick={loadDashboardData}
+              className="px-2.5 py-1 rounded bg-[#1a3e29] border border-[#295a3d] text-stone-300 hover:text-white text-[11px] flex items-center gap-1 cursor-pointer"
             >
-              <Check size={14} />
-              <span>{editingMatchId ? "Update Match" : "Publish Featured Match"}</span>
+              <RefreshCw size={11} />
+              <span>Refresh</span>
             </button>
-          </form>
+          </div>
 
-          {/* Settle Modal / Drawer if active */}
-          {settlingMatch && (
-            <div className="p-5 rounded-xl bg-[#143320] border-2 border-emerald-500/80 shadow-2xl flex flex-col gap-4">
-              <div className="flex items-center justify-between pb-2 border-b border-[#295a3d]">
-                <div>
-                  <h4 className="text-sm font-bold text-white flex items-center gap-2">
-                    <span>⚽ Settle Match Result:</span>
-                    <span className="text-emerald-400">{settlingMatch.homeTeam} vs {settlingMatch.awayTeam}</span>
-                  </h4>
-                  <p className="text-[11px] text-stone-300">
-                    Enter final full-time score and goals scored by listed players. All predictions will be scored automatically across all 3 legs.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setSettlingMatch(null)}
-                  className="text-stone-400 hover:text-white cursor-pointer"
-                >
-                  <X size={18} />
-                </button>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4 max-w-sm">
-                <div>
-                  <label className="text-xs text-stone-200 font-medium">{settlingMatch.homeTeam} Goals</label>
-                  <input
-                    type="number"
-                    min={0}
-                    max={20}
-                    value={settleHomeGoals}
-                    onChange={e => setSettleHomeGoals(Math.max(0, parseInt(e.target.value) || 0))}
-                    className="w-full mt-1 px-3 py-2 rounded-lg bg-[#122b1c] border border-[#295a3d] text-base font-bold text-white font-mono"
-                  />
+          {/* ====================================================== */}
+          {/* VIEW 1: MATCH FIXTURES, CREATION & SETTLEMENT */}
+          {/* ====================================================== */}
+          {predictionView === 'matches' && (
+            <div className="flex flex-col gap-6">
+              
+              {/* Form: Create or Edit Match */}
+              <form onSubmit={handleSaveMatch} className="bg-[#122b1c] p-5 rounded-2xl border border-[#295a3d] flex flex-col gap-4">
+                <div className="flex items-center justify-between border-b border-[#295a3d] pb-2">
+                  <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                    <Calendar size={15} className="text-[#42bd6c]" />
+                    <span>{editingMatchId ? "Edit Match Fixture" : "Schedule New Weekly Prediction Match"}</span>
+                  </h3>
+                  {editingMatchId && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingMatchId(null);
+                        setHomeTeam("");
+                        setAwayTeam("");
+                        setKickoffDateTime("");
+                      }}
+                      className="text-stone-400 hover:text-white text-xs cursor-pointer"
+                    >
+                      Cancel Edit
+                    </button>
+                  )}
                 </div>
 
-                <div>
-                  <label className="text-xs text-stone-200 font-medium">{settlingMatch.awayTeam} Goals</label>
-                  <input
-                    type="number"
-                    min={0}
-                    max={20}
-                    value={settleAwayGoals}
-                    onChange={e => setSettleAwayGoals(Math.max(0, parseInt(e.target.value) || 0))}
-                    className="w-full mt-1 px-3 py-2 rounded-lg bg-[#122b1c] border border-[#295a3d] text-base font-bold text-white font-mono"
-                  />
-                </div>
-              </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                  <div>
+                    <label className="text-[11px] font-medium text-stone-300 block mb-1">Home Team</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. Arsenal"
+                      value={homeTeam}
+                      onChange={e => setHomeTeam(e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg bg-[#1a3e29] border border-[#295a3d] text-xs text-white placeholder:text-stone-500"
+                    />
+                  </div>
 
-              <div>
-                <label className="text-xs text-stone-300 font-medium block mb-2">
-                  Player Goals Scored (Own goals do not count as player goals)
-                </label>
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
-                  {(settlingMatch.players || []).map((p: MatchPlayer, idx: number) => (
-                    <div key={idx} className="p-2 rounded-lg bg-[#122b1c] border border-[#295a3d] flex items-center justify-between">
-                      <div className="truncate mr-2">
-                        <span className="text-xs text-white font-medium block truncate">{p.name}</span>
-                        <span className="text-[9px] text-stone-400 uppercase font-mono">{p.team}</span>
+                  <div>
+                    <label className="text-[11px] font-medium text-stone-300 block mb-1">Away Team</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. Liverpool"
+                      value={awayTeam}
+                      onChange={e => setAwayTeam(e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg bg-[#1a3e29] border border-[#295a3d] text-xs text-white placeholder:text-stone-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] font-medium text-stone-300 block mb-1">Competition</label>
+                    <input
+                      type="text"
+                      value={competition}
+                      onChange={e => setCompetition(e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg bg-[#1a3e29] border border-[#295a3d] text-xs text-white"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] font-medium text-stone-300 block mb-1">Kickoff (Your Local Time)</label>
+                    <input
+                      type="datetime-local"
+                      required
+                      value={kickoffDateTime}
+                      onChange={e => handleKickoffChange(e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg bg-[#1a3e29] border border-[#295a3d] text-xs text-white"
+                    />
+                  </div>
+
+                  <div className="sm:col-span-2">
+                    <label className="text-[11px] font-medium text-stone-300 block mb-1">Prize Description</label>
+                    <input
+                      type="text"
+                      value={prizeDesc}
+                      onChange={e => setPrizeDesc(e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg bg-[#1a3e29] border border-[#295a3d] text-xs text-white"
+                    />
+                  </div>
+                </div>
+
+                {saturdayWarning && (
+                  <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-200 text-xs flex items-center gap-2">
+                    <AlertTriangle size={15} className="shrink-0 text-amber-400" />
+                    <span>{saturdayWarning}</span>
+                  </div>
+                )}
+
+                {/* Player Roster for Leg 3 Selection */}
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="text-xs font-semibold text-stone-200">
+                      Roster of Pickable Players (Leg 3 Goalscorer)
+                    </label>
+                    <button
+                      type="button"
+                      onClick={handleAddPlayer}
+                      className="text-xs text-[#42bd6c] hover:underline flex items-center gap-1 cursor-pointer"
+                    >
+                      <Plus size={12} />
+                      <span>Add Player</span>
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+                    {playersList.map((player, idx) => (
+                      <div key={idx} className="flex items-center gap-1 bg-[#1a3e29] border border-[#295a3d] rounded-lg p-1.5">
+                        <input
+                          type="text"
+                          placeholder="Player Name"
+                          value={player.name}
+                          onChange={e => handlePlayerChange(idx, "name", e.target.value)}
+                          className="flex-1 px-2 py-1 bg-transparent text-xs text-white focus:outline-none"
+                        />
+                        <select
+                          value={player.team}
+                          onChange={e => handlePlayerChange(idx, "team", e.target.value as any)}
+                          className="bg-[#122b1c] text-[10px] text-stone-300 rounded px-1.5 py-1 border border-[#295a3d]"
+                        >
+                          <option value="home">Home</option>
+                          <option value="away">Away</option>
+                        </select>
+                        <button
+                          type="button"
+                          onClick={() => handleRemovePlayer(idx)}
+                          className="text-stone-400 hover:text-red-400 p-1 cursor-pointer"
+                        >
+                          <X size={13} />
+                        </button>
                       </div>
+                    ))}
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  className="self-start px-5 py-2.5 rounded-xl bg-[#2d824d] hover:bg-[#226a3f] text-white text-xs font-bold transition-all shadow-md flex items-center gap-2 cursor-pointer"
+                >
+                  <Check size={14} />
+                  <span>{editingMatchId ? "Update Match Fixture" : "Publish Match Fixture"}</span>
+                </button>
+              </form>
+
+              {/* Settlement & Correction Modal Drawer */}
+              {settlingMatch && (
+                <div className="p-5 rounded-2xl bg-[#143320] border-2 border-emerald-500/80 shadow-2xl flex flex-col gap-4">
+                  <div className="flex items-center justify-between pb-2 border-b border-[#295a3d]">
+                    <div>
+                      <h4 className="text-base font-bold text-white flex items-center gap-2">
+                        <span>{isCorrectionMode ? "⚠️ Correct Settled Result (Audit History):" : "⚽ Settle Official Match Result:"}</span>
+                        <span className="text-emerald-400">{settlingMatch.homeTeam} vs {settlingMatch.awayTeam}</span>
+                      </h4>
+                      <p className="text-xs text-stone-300 mt-0.5">
+                        {isCorrectionMode
+                          ? "Safely revise official scores with an audit log trail. Predictions will be re-scored automatically."
+                          : "Enter full-time final scores. All predictions will be scored across outcome, scoreline, and player goals."}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setSettlingMatch(null)}
+                      className="text-stone-400 hover:text-white cursor-pointer"
+                    >
+                      <X size={18} />
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4 max-w-sm">
+                    <div>
+                      <label className="text-xs text-stone-200 font-medium">{settlingMatch.homeTeam} Goals</label>
                       <input
                         type="number"
                         min={0}
-                        max={10}
-                        value={settlePlayerGoals[p.name] ?? 0}
-                        onChange={e => {
-                          const val = Math.max(0, parseInt(e.target.value) || 0);
-                          setSettlePlayerGoals(prev => ({ ...prev, [p.name]: val }));
-                        }}
-                        className="w-12 px-2 py-1 rounded bg-[#1a3e29] border border-[#295a3d] text-xs font-mono font-bold text-center text-white"
+                        max={20}
+                        value={settleHomeGoals}
+                        onChange={e => setSettleHomeGoals(Math.max(0, parseInt(e.target.value) || 0))}
+                        className="w-full mt-1 px-3 py-2 rounded-lg bg-[#122b1c] border border-[#295a3d] text-base font-bold text-white font-mono"
                       />
                     </div>
-                  ))}
+
+                    <div>
+                      <label className="text-xs text-stone-200 font-medium">{settlingMatch.awayTeam} Goals</label>
+                      <input
+                        type="number"
+                        min={0}
+                        max={20}
+                        value={settleAwayGoals}
+                        onChange={e => setSettleAwayGoals(Math.max(0, parseInt(e.target.value) || 0))}
+                        className="w-full mt-1 px-3 py-2 rounded-lg bg-[#122b1c] border border-[#295a3d] text-base font-bold text-white font-mono"
+                      />
+                    </div>
+                  </div>
+
+                  {isCorrectionMode && (
+                    <div>
+                      <label className="text-xs text-amber-300 font-medium block mb-1">
+                        Reason for Correction (Recorded in Audit History)
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. VAR decision overturned 92nd min goal after post-match review"
+                        value={correctionReason}
+                        onChange={e => setCorrectionReason(e.target.value)}
+                        className="w-full px-3 py-2 rounded-lg bg-[#122b1c] border border-amber-500/50 text-xs text-white"
+                      />
+                    </div>
+                  )}
+
+                  <div>
+                    <label className="text-xs text-stone-300 font-medium block mb-2">
+                      Roster Player Goals Scored
+                    </label>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+                      {(settlingMatch.players || []).map((p: MatchPlayer, idx: number) => (
+                        <div key={idx} className="p-2 rounded-lg bg-[#122b1c] border border-[#295a3d] flex items-center justify-between">
+                          <div className="truncate mr-2">
+                            <span className="text-xs text-white font-medium block truncate">{p.name}</span>
+                            <span className="text-[9px] text-stone-400 uppercase font-mono">{p.team}</span>
+                          </div>
+                          <input
+                            type="number"
+                            min={0}
+                            max={10}
+                            value={settlePlayerGoals[p.name] ?? 0}
+                            onChange={e => {
+                              const val = Math.max(0, parseInt(e.target.value) || 0);
+                              setSettlePlayerGoals(prev => ({ ...prev, [p.name]: val }));
+                            }}
+                            className="w-12 px-2 py-1 rounded bg-[#1a3e29] border border-[#295a3d] text-xs font-mono font-bold text-center text-white"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-3 pt-2">
+                    <button
+                      type="button"
+                      onClick={handleExecuteSettle}
+                      className="px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-stone-950 font-bold text-xs transition-all flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Check size={15} />
+                      <span>{isCorrectionMode ? "Apply Correction & Re-evaluate Predictions" : "Execute Settlement & Compute Winners"}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSettlingMatch(null)}
+                      className="px-4 py-2.5 rounded-xl bg-[#1a3e29] text-stone-300 text-xs cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                  </div>
                 </div>
+              )}
+
+              {/* Match Fixtures List */}
+              <div className="flex flex-col gap-3">
+                <span className="text-xs font-mono text-stone-400 font-bold uppercase tracking-wider">
+                  Configured Weekly Matches ({matches.length})
+                </span>
+
+                {matches.map((m: any) => {
+                  const kickoffDate = new Date(m.kickoffAt);
+                  const isPastKickoff = new Date() >= kickoffDate;
+                  const isAuditExpanded = expandedAuditMatchId === m.id;
+
+                  return (
+                    <div key={m.id} className="p-5 rounded-2xl bg-[#122b1c] border border-[#295a3d] flex flex-col gap-3">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#295a3d] pb-2">
+                        <div className="flex items-center gap-2">
+                          <h4 className="text-base font-bold text-white">
+                            {m.homeTeam} vs {m.awayTeam}
+                          </h4>
+                          <span className={`text-[10px] font-mono px-2 py-0.5 rounded font-bold uppercase ${
+                            m.status === "settled" ? "bg-amber-400/20 text-amber-300" :
+                            m.status === "void" ? "bg-stone-700 text-stone-300" :
+                            "bg-emerald-400/20 text-emerald-300"
+                          }`}>
+                            {m.status}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          {m.status === "scheduled" && (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => handleStartEditMatch(m)}
+                                disabled={isPastKickoff}
+                                className="px-3 py-1 rounded-lg bg-[#224e38] hover:bg-[#295a3d] disabled:opacity-40 text-stone-200 text-xs font-medium cursor-pointer"
+                              >
+                                Edit
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleOpenSettle(m, false)}
+                                className="px-3 py-1 rounded-lg bg-[#2d824d] hover:bg-[#226a3f] text-white text-xs font-bold cursor-pointer"
+                              >
+                                Settle Result
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleVoidMatch(m.id)}
+                                className="px-3 py-1 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 text-xs font-medium cursor-pointer"
+                              >
+                                Void
+                              </button>
+                            </>
+                          )}
+                          {m.status === "settled" && (
+                            <button
+                              type="button"
+                              onClick={() => handleOpenSettle(m, true)}
+                              className="px-3 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-xs font-bold cursor-pointer flex items-center gap-1"
+                            >
+                              <History size={13} />
+                              <span>Correct Result</span>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 text-xs font-mono">
+                        <div>
+                          <span className="text-[10px] text-stone-400 block">Kickoff</span>
+                          <span className="text-white mt-0.5 block">{kickoffDate.toLocaleString()}</span>
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-stone-400 block">Total Entries</span>
+                          <span className="text-white font-bold text-sm mt-0.5 block">{m.stats?.totalEntries || 0}</span>
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-stone-400 block">Leg Hits</span>
+                          <span className="text-stone-300 mt-0.5 block">
+                            L1: {m.stats?.leg1CorrectCount || 0} • L2: {m.stats?.leg2CorrectCount || 0} • L3: {m.stats?.leg3CorrectCount || 0}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-stone-400 block">Grand Prize Winners</span>
+                          <span className="text-amber-400 font-bold text-sm mt-0.5 block">
+                            {m.stats?.grandPrizeWinnersCount || 0} Winner(s)
+                          </span>
+                        </div>
+                      </div>
+
+                      {m.result && (
+                        <div className="p-2.5 rounded-lg bg-[#1a3e29] border border-[#295a3d] flex items-center justify-between text-xs">
+                          <span className="text-stone-200">
+                            Result: <strong>{m.homeTeam} {m.result.homeGoals} - {m.result.awayGoals} {m.awayTeam}</strong>
+                          </span>
+                          {m.auditHistory && m.auditHistory.length > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => setExpandedAuditMatchId(isAuditExpanded ? null : m.id)}
+                              className="text-amber-300 text-[11px] font-mono hover:underline flex items-center gap-1 cursor-pointer"
+                            >
+                              <span>Audit History ({m.auditHistory.length})</span>
+                            </button>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Expandable Audit Log History */}
+                      {isAuditExpanded && m.auditHistory && (
+                        <div className="p-3 rounded-xl bg-stone-950/80 border border-amber-500/30 text-xs font-mono flex flex-col gap-2">
+                          <span className="text-[10px] text-amber-400 font-bold uppercase tracking-wider">
+                            🛡️ Official Result Correction Audit Trail:
+                          </span>
+                          {m.auditHistory.map((entry: MatchAuditEntry) => (
+                            <div key={entry.id} className="p-2 rounded bg-[#122b1c] border border-[#295a3d] flex flex-col gap-1 text-[11px]">
+                              <div className="flex items-center justify-between text-stone-400">
+                                <span>{new Date(entry.changedAt).toLocaleString()}</span>
+                                <span className="text-stone-300">By: {entry.adminEmail}</span>
+                              </div>
+                              <p className="text-white">
+                                Revised to: <strong>{entry.newResult.homeGoals} - {entry.newResult.awayGoals}</strong>
+                              </p>
+                              <p className="text-stone-300 italic">
+                                Reason: "{entry.reason}"
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Winners List with Claim Status Toggle */}
+                      {m.winners && m.winners.length > 0 && (
+                        <div className="pt-2 border-t border-[#295a3d] flex flex-col gap-2">
+                          <span className="text-[11px] font-bold text-amber-300 font-mono">🏆 Grand Prize Winners:</span>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            {m.winners.map((w: any) => (
+                              <div key={w.uid} className="p-2.5 rounded-lg bg-[#1a3e29] border border-[#295a3d] flex items-center justify-between text-xs">
+                                <div>
+                                  <span className="text-white font-semibold block">{w.displayName}</span>
+                                  {w.claimCode && (
+                                    <span className="text-[10px] font-mono text-amber-300">Ref: {w.claimCode}</span>
+                                  )}
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => handleTogglePrizeCollected(m.id, w.uid, w.prizeCollected)}
+                                  className={`px-2.5 py-1 rounded text-[10px] font-mono font-bold cursor-pointer ${
+                                    w.prizeCollected
+                                      ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/40"
+                                      : "bg-amber-500/20 text-amber-300 border border-amber-500/40"
+                                  }`}
+                                >
+                                  {w.prizeCollected ? "✓ Redeemed" : "Mark Redeemed"}
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                    </div>
+                  );
+                })}
               </div>
 
-              <div className="flex items-center gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={handleExecuteSettle}
-                  className="px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-stone-950 font-bold text-xs transition-all flex items-center gap-1.5 cursor-pointer"
-                >
-                  <Check size={15} />
-                  <span>Execute Settlement & Compute Winners</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSettlingMatch(null)}
-                  className="px-4 py-2.5 rounded-xl bg-[#1a3e29] text-stone-300 text-xs font-medium cursor-pointer"
-                >
-                  Cancel
-                </button>
-              </div>
             </div>
           )}
 
-          {/* Matches List */}
-          <div className="flex flex-col gap-3">
-            <h4 className="text-xs font-bold text-stone-300 font-mono uppercase tracking-wider">
-              Prediction Matches History ({matches.length})
-            </h4>
+          {/* ====================================================== */}
+          {/* VIEW 2: CUSTOMER PREDICTIONS BROWSER WITH FILTERS */}
+          {/* ====================================================== */}
+          {predictionView === 'customer_predictions' && (
+            <div className="flex flex-col gap-4">
+              
+              {/* Filter Bar */}
+              <div className="bg-[#122b1c] p-4 rounded-xl border border-[#295a3d] flex flex-wrap items-center gap-3 text-xs">
+                {/* Search */}
+                <div className="relative flex-1 min-w-[200px]">
+                  <Search size={14} className="absolute left-3 top-2.5 text-stone-400" />
+                  <input
+                    type="text"
+                    placeholder="Search customer name, email, or claim code..."
+                    value={predSearchTerm}
+                    onChange={e => setPredSearchTerm(e.target.value)}
+                    className="w-full pl-9 pr-3 py-2 rounded-lg bg-[#1a3e29] border border-[#295a3d] text-white text-xs placeholder:text-stone-500"
+                  />
+                </div>
 
-            {matches.map((m: any) => {
-              const kickoffDate = new Date(m.kickoffAt);
-              const isPastKickoff = new Date() >= kickoffDate;
+                {/* Match Filter */}
+                <div>
+                  <select
+                    value={predFilterMatch}
+                    onChange={e => setPredFilterMatch(e.target.value)}
+                    className="px-3 py-2 rounded-lg bg-[#1a3e29] border border-[#295a3d] text-white text-xs"
+                  >
+                    <option value="">All Matches</option>
+                    {matches.map(m => (
+                      <option key={m.id} value={m.id}>{m.homeTeam} vs {m.awayTeam}</option>
+                    ))}
+                  </select>
+                </div>
 
-              return (
-                <div key={m.id} className="p-4 rounded-xl bg-[#122b1c] border border-[#295a3d] flex flex-col gap-3">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-[#295a3d]">
-                    <div className="flex items-center gap-3">
-                      <div className="px-2.5 py-1 rounded-full text-[10px] font-mono font-bold uppercase border bg-[#1a3e29] border-[#295a3d] text-[#42bd6c]">
-                        {m.weekKey || "WEEK"}
-                      </div>
-                      <h5 className="text-base font-bold text-white tracking-tight">
-                        {m.homeTeam} vs {m.awayTeam}
-                      </h5>
-                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono uppercase font-bold ${
-                        m.status === "settled" 
-                          ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/40"
-                          : m.status === "void"
-                          ? "bg-red-500/20 text-red-400 border border-red-500/40"
-                          : "bg-amber-500/20 text-amber-400 border border-amber-500/40"
-                      }`}>
-                        {m.status}
+                {/* Status Filter */}
+                <div>
+                  <select
+                    value={predFilterStatus}
+                    onChange={e => setPredFilterStatus(e.target.value)}
+                    className="px-3 py-2 rounded-lg bg-[#1a3e29] border border-[#295a3d] text-white text-xs"
+                  >
+                    <option value="all">All Statuses</option>
+                    <option value="winner">Grand Prize Winners (3/3)</option>
+                    <option value="unclaimed">Unclaimed Winners</option>
+                    <option value="claimed">Claimed / Redeemed</option>
+                    <option value="pending">Upcoming Matches</option>
+                  </select>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={loadAllPredictions}
+                  className="px-3 py-2 rounded-lg bg-[#2d824d] text-white font-bold text-xs cursor-pointer flex items-center gap-1.5"
+                >
+                  <Filter size={13} />
+                  <span>Apply Filter</span>
+                </button>
+              </div>
+
+              {/* Table of User Predictions */}
+              <div className="bg-[#122b1c] rounded-2xl border border-[#295a3d] overflow-hidden">
+                <div className="p-3.5 border-b border-[#295a3d] flex items-center justify-between text-xs font-mono">
+                  <span className="text-white font-bold">Customer Predictions List ({allPredictions.length})</span>
+                  <span className="text-stone-400">Showing submitted picks across all fixtures</span>
+                </div>
+
+                {loadingPredictions ? (
+                  <div className="p-8 text-center text-xs font-mono text-stone-300">
+                    Loading predictions...
+                  </div>
+                ) : allPredictions.length > 0 ? (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs font-mono border-collapse">
+                      <thead>
+                        <tr className="bg-[#1a3e29] text-stone-300 border-b border-[#295a3d]">
+                          <th className="p-3">Customer</th>
+                          <th className="p-3">Match</th>
+                          <th className="p-3">L1 (Outcome)</th>
+                          <th className="p-3">L2 (Score)</th>
+                          <th className="p-3">L3 (Player Goals)</th>
+                          <th className="p-3">Leg Hits</th>
+                          <th className="p-3">Winner Status</th>
+                          <th className="p-3">Claim Reference</th>
+                          <th className="p-3">Action</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-[#295a3d]">
+                        {allPredictions.map((pred, i) => {
+                          const m = pred.match;
+                          const isSettled = m?.status === "settled";
+
+                          return (
+                            <tr key={i} className="hover:bg-[#1a3e29]/50 transition-colors">
+                              <td className="p-3 font-semibold text-white">
+                                <div>{pred.displayName}</div>
+                                <span className="text-[10px] text-stone-400 font-normal">
+                                  {pred.registeredEmail || pred.uid}
+                                </span>
+                              </td>
+
+                              <td className="p-3 text-stone-200">
+                                <div>{m ? `${m.homeTeam} vs ${m.awayTeam}` : pred.matchId}</div>
+                                <span className="text-[9px] text-stone-400">{m?.weekKey || "2026"}</span>
+                              </td>
+
+                              <td className="p-3">
+                                <span className="font-bold text-white">{pred.outcome}</span>
+                                {isSettled && (
+                                  pred.leg1Correct ? <span className="text-emerald-400 ml-1">✓</span> : <span className="text-red-400 ml-1">✗</span>
+                                )}
+                              </td>
+
+                              <td className="p-3">
+                                <span className="font-bold text-white">{pred.scoreline}</span>
+                                {isSettled && (
+                                  pred.leg2Correct ? <span className="text-emerald-400 ml-1">✓</span> : <span className="text-red-400 ml-1">✗</span>
+                                )}
+                              </td>
+
+                              <td className="p-3">
+                                <span className="text-stone-200">{pred.playerName} ({pred.playerGoals})</span>
+                                {isSettled && (
+                                  pred.leg3Correct ? <span className="text-emerald-400 ml-1">✓</span> : <span className="text-red-400 ml-1">✗</span>
+                                )}
+                              </td>
+
+                              <td className="p-3">
+                                {isSettled ? (
+                                  <span className="font-bold text-white">{pred.legsCorrect}/3</span>
+                                ) : (
+                                  <span className="text-stone-500">Pending</span>
+                                )}
+                              </td>
+
+                              <td className="p-3">
+                                {pred.grandPrizeWinner ? (
+                                  <span className="px-2 py-0.5 rounded-full bg-amber-400 text-stone-950 font-black text-[10px]">
+                                    👑 Winner
+                                  </span>
+                                ) : isSettled ? (
+                                  <span className="text-stone-400 text-[10px]">No</span>
+                                ) : (
+                                  <span className="text-stone-500 text-[10px]">Awaited</span>
+                                )}
+                              </td>
+
+                              <td className="p-3">
+                                {pred.claimCode ? (
+                                  <span className="text-amber-300 font-bold text-[11px] select-all">
+                                    {pred.claimCode}
+                                  </span>
+                                ) : (
+                                  <span className="text-stone-600">-</span>
+                                )}
+                              </td>
+
+                              <td className="p-3">
+                                {pred.grandPrizeWinner ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleTogglePrizeCollected(pred.matchId, pred.uid, pred.prizeCollected)}
+                                    className={`px-2.5 py-1 rounded text-[10px] font-bold cursor-pointer ${
+                                      pred.prizeCollected
+                                        ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
+                                        : "bg-amber-400 text-stone-950 shadow-sm"
+                                    }`}
+                                  >
+                                    {pred.prizeCollected ? "✓ Claimed" : "Redeem"}
+                                  </button>
+                                ) : (
+                                  <span className="text-stone-500 text-[10px]">N/A</span>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="p-8 text-center text-xs font-mono text-stone-400">
+                    No customer predictions matching your search filters.
+                  </div>
+                )}
+              </div>
+
+            </div>
+          )}
+
+          {/* ====================================================== */}
+          {/* VIEW 3: BARISTA / COUNTER VERIFICATION & REDEMPTION */}
+          {/* ====================================================== */}
+          {predictionView === 'verify_claim' && (
+            <div className="bg-[#122b1c] p-6 rounded-2xl border border-[#295a3d] flex flex-col gap-6">
+              <div>
+                <span className="text-[10px] font-mono text-amber-300 uppercase font-black tracking-widest block mb-1">
+                  BARISTA & COUNTER VERIFICATION DESK
+                </span>
+                <h3 className="text-xl font-bold font-serif-display text-white">
+                  Verify Customer Winning Code & Redeem Prize
+                </h3>
+                <p className="text-xs text-stone-300 mt-0.5">
+                  When a customer shows their Buna voucher reference on their phone, enter or scan it below to confirm eligibility and mark it as redeemed.
+                </p>
+              </div>
+
+              {/* Input Form */}
+              <form onSubmit={handleVerifyClaimCode} className="flex flex-col sm:flex-row gap-3 max-w-xl">
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. BUNA-WIN-MCIAS-U1ABE"
+                  value={claimInput}
+                  onChange={e => setClaimInput(e.target.value.toUpperCase())}
+                  className="flex-1 px-4 py-2.5 rounded-xl bg-[#1a3e29] border border-[#295a3d] text-sm text-white font-mono placeholder:text-stone-500 focus:outline-none focus:border-amber-400"
+                />
+                <button
+                  type="submit"
+                  disabled={verifyingClaim}
+                  className="px-6 py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-stone-950 font-black text-xs font-mono transition-all shadow-md cursor-pointer disabled:opacity-60"
+                >
+                  {verifyingClaim ? "Verifying..." : "Verify Code"}
+                </button>
+              </form>
+
+              {claimError && (
+                <div className="p-3.5 rounded-xl bg-red-500/15 border border-red-500/40 text-red-200 text-xs font-mono flex items-center gap-2">
+                  <AlertTriangle size={16} className="text-red-400 shrink-0" />
+                  <span>{claimError}</span>
+                </div>
+              )}
+
+              {/* Verified Result Voucher Display */}
+              {claimResult?.prediction && (
+                <div className={`p-5 rounded-2xl border-2 flex flex-col gap-4 ${
+                  claimResult.prediction.prizeCollected
+                    ? "bg-[#102418] border-[#295a3d]"
+                    : "bg-gradient-to-br from-[#1a3e29] to-[#122b1c] border-amber-400 shadow-xl"
+                }`}>
+                  <div className="flex items-center justify-between border-b border-[#295a3d] pb-3">
+                    <div>
+                      <span className="text-[10px] font-mono text-amber-300 uppercase font-black block">
+                        VERIFIED GRAND PRIZE RECORD ✓
+                      </span>
+                      <h4 className="text-lg font-bold text-white">
+                        Customer: {claimResult.prediction.displayName}
+                      </h4>
+                    </div>
+
+                    {claimResult.prediction.prizeCollected ? (
+                      <span className="px-3 py-1 rounded-full bg-red-500/20 text-red-300 border border-red-500/40 text-xs font-mono font-bold">
+                        Already Claimed on {new Date(claimResult.prediction.prizeCollectedAt).toLocaleDateString()}
+                      </span>
+                    ) : (
+                      <span className="px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 text-xs font-mono font-bold">
+                        Eligible for Immediate Claim
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs font-mono">
+                    <div className="p-3 rounded-xl bg-[#122b1c] border border-[#295a3d]">
+                      <span className="text-stone-400 text-[10px] block">Match Fixture</span>
+                      <span className="text-white font-bold mt-0.5 block">
+                        {claimResult.match ? `${claimResult.match.homeTeam} vs ${claimResult.match.awayTeam}` : claimResult.prediction.matchId}
                       </span>
                     </div>
 
-                    <div className="flex items-center gap-2">
-                      {m.status === "scheduled" && (
-                        <>
-                          <button
-                            type="button"
-                            onClick={() => handleStartEditMatch(m)}
-                            disabled={isPastKickoff}
-                            className="px-3 py-1 rounded-lg bg-[#224e38] hover:bg-[#295a3d] disabled:opacity-40 text-stone-200 text-xs font-medium cursor-pointer"
-                          >
-                            Edit
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleOpenSettle(m)}
-                            className="px-3 py-1 rounded-lg bg-[#2d824d] hover:bg-[#226a3f] text-white text-xs font-bold cursor-pointer"
-                          >
-                            Settle Result
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleVoidMatch(m.id)}
-                            className="px-3 py-1 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 text-xs font-medium cursor-pointer"
-                          >
-                            Void
-                          </button>
-                        </>
-                      )}
-                      {m.status === "settled" && (
-                        <button
-                          type="button"
-                          onClick={() => handleOpenSettle(m)}
-                          className="px-3 py-1 rounded-lg bg-[#224e38] hover:bg-[#295a3d] text-stone-200 text-xs font-medium cursor-pointer"
-                        >
-                          Re-Settle
-                        </button>
-                      )}
+                    <div className="p-3 rounded-xl bg-[#122b1c] border border-[#295a3d]">
+                      <span className="text-stone-400 text-[10px] block">Prize Reward</span>
+                      <span className="text-amber-300 font-bold mt-0.5 block">
+                        {claimResult.match?.prizeDescription || "Free Buna Coffee"}
+                      </span>
+                    </div>
+
+                    <div className="p-3 rounded-xl bg-[#122b1c] border border-[#295a3d]">
+                      <span className="text-stone-400 text-[10px] block">Scoreline & Outcome</span>
+                      <span className="text-emerald-400 font-bold mt-0.5 block">
+                        {claimResult.prediction.outcome} • {claimResult.prediction.scoreline}
+                      </span>
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 text-xs">
-                    <div>
-                      <span className="text-[10px] text-stone-400 font-mono">Kickoff UTC</span>
-                      <p className="text-stone-200 mt-0.5">{kickoffDate.toUTCString()}</p>
+                  {/* Duplicate Prevention Guard Notice */}
+                  {claimResult.prediction.prizeCollected ? (
+                    <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-200 text-xs font-mono">
+                      ⚠️ <strong>Duplicate Prevention Notice:</strong> This reward has already been issued on {new Date(claimResult.prediction.prizeCollectedAt).toLocaleString()} by staff ({claimResult.prediction.collectedBy || 'Barista'}). Do NOT issue a second prize for this reference code.
                     </div>
-
-                    <div>
-                      <span className="text-[10px] text-stone-400 font-mono">Total User Entries</span>
-                      <p className="text-white font-bold font-mono text-sm mt-0.5">{m.stats?.totalEntries || 0}</p>
-                    </div>
-
-                    <div>
-                      <span className="text-[10px] text-stone-400 font-mono">Leg Success Hits</span>
-                      <p className="text-stone-300 font-mono mt-0.5">
-                        L1: <strong>{m.stats?.leg1CorrectCount || 0}</strong> • L2: <strong>{m.stats?.leg2CorrectCount || 0}</strong> • L3: <strong>{m.stats?.leg3CorrectCount || 0}</strong>
-                      </p>
-                    </div>
-
-                    <div>
-                      <span className="text-[10px] text-stone-400 font-mono">Grand Prize Winners</span>
-                      <p className="text-amber-400 font-bold font-mono text-sm mt-0.5">
-                        {m.stats?.grandPrizeWinnersCount || 0} Winner(s)
-                      </p>
-                    </div>
-                  </div>
-
-                  {m.result && (
-                    <div className="p-2.5 rounded-lg bg-[#1a3e29] border border-[#295a3d] flex items-center justify-between text-xs">
-                      <span className="text-stone-300">
-                        Official Result: <strong>{m.homeTeam} {m.result.homeGoals} - {m.result.awayGoals} {m.awayTeam}</strong>
+                  ) : (
+                    <div className="flex items-center justify-between pt-2">
+                      <span className="text-xs text-stone-300 font-mono">
+                        Hand the prize to customer and click Confirm Redemption to prevent reuse.
                       </span>
-                      <span className="text-stone-400 font-mono text-[11px]">
-                        Goals: {Object.entries(m.result.playerGoals || {}).filter(([_, g]) => (g as number) > 0).map(([p, g]) => `${p} (${g})`).join(", ") || "No roster goals"}
-                      </span>
-                    </div>
-                  )}
 
-                  {/* Winners section */}
-                  {m.winners && m.winners.length > 0 && (
-                    <div className="pt-2 border-t border-[#295a3d] flex flex-col gap-2">
-                      <span className="text-[11px] font-bold text-amber-300 font-mono">🏆 Grand Prize Winners:</span>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                        {m.winners.map((w: any) => (
-                          <div key={w.uid} className="p-2 rounded bg-[#1a3e29] border border-[#295a3d] flex items-center justify-between text-xs">
-                            <span className="text-white font-semibold">{w.displayName}</span>
-                            <button
-                              type="button"
-                              onClick={() => handleTogglePrizeCollected(m.id, w.uid, w.prizeCollected)}
-                              className={`px-2 py-0.5 rounded text-[10px] font-mono cursor-pointer ${
-                                w.prizeCollected
-                                  ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/40"
-                                  : "bg-amber-500/20 text-amber-300 border border-amber-500/40"
-                              }`}
-                            >
-                              {w.prizeCollected ? "✓ Prize Collected" : "Mark Collected"}
-                            </button>
-                          </div>
-                        ))}
-                      </div>
+                      <button
+                        type="button"
+                        disabled={redeemingClaim}
+                        onClick={handleConfirmRedemption}
+                        className="px-6 py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-[#42bd6c] hover:from-emerald-600 hover:to-emerald-600 text-stone-950 font-black text-xs font-mono transition-all shadow-lg cursor-pointer disabled:opacity-60"
+                      >
+                        {redeemingClaim ? "Recording..." : "✓ Confirm Prize Redeemed & Lock Code"}
+                      </button>
                     </div>
                   )}
 
                 </div>
-              );
-            })}
-          </div>
+              )}
+            </div>
+          )}
+
         </div>
       )}
 
-      {/* Tab 4: Customer Profiles */}
+      {/* ======================================================== */}
+      {/* SECTION: REGISTERED USERS */}
+      {/* ======================================================== */}
       {activeSubTab === 'users' && (
         <div className="flex flex-col gap-4">
           <div className="flex items-center justify-between">
-            <span className="text-xs text-stone-300 font-mono">Total Users ({users.length})</span>
+            <h3 className="text-sm font-bold text-white font-mono uppercase tracking-wider">
+              Registered Customer Accounts ({users.length})
+            </h3>
           </div>
 
           <div className="flex flex-col gap-2">
@@ -919,22 +1267,23 @@ export default function OwnerDashboard() {
                 <div key={u.id || idx} className="p-3.5 rounded-xl bg-[#122b1c] border border-[#295a3d] flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
                   <div>
                     <span className="text-white font-bold">{u.name || "Customer"}</span>
-                    <p className="text-stone-400 font-mono text-[11px]">{u.email || u.phone || "Guest ID: " + u.id}</p>
+                    <p className="text-stone-400 font-mono text-[11px]">{u.email || u.phone || "ID: " + u.id}</p>
                   </div>
-                  <div className="flex items-center gap-3">
-                    <span className="text-stone-300 font-mono">Points: <strong>{u.points || 0}</strong></span>
-                    <span className="text-emerald-400 font-mono text-[11px]">Active Passport Explorer</span>
+                  <div className="flex items-center gap-3 font-mono text-xs">
+                    <span className="text-stone-300">Registered: <strong>{u.date || "Active"}</strong></span>
+                    <span className="text-emerald-400 text-[11px]">Active Account</span>
                   </div>
                 </div>
               ))
             ) : (
               <div className="p-4 rounded-xl bg-[#122b1c] border border-[#295a3d] text-center text-xs text-stone-400">
-                Registered profiles will appear here as users sign in via Google.
+                Customer profiles appear here as users register or sign in.
               </div>
             )}
           </div>
         </div>
       )}
+
     </div>
   );
 }

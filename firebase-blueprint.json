@@ -62,6 +62,38 @@
         "active": { "type": "boolean" }
       },
       "required": ["title", "code", "discount"]
+    },
+    "PredictionMatch": {
+      "title": "Prediction Match",
+      "description": "Weekly match fixture with kickoff time, teams, and settlement result",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "homeTeam": { "type": "string", "maxLength": 100 },
+        "awayTeam": { "type": "string", "maxLength": 100 },
+        "competition": { "type": "string", "maxLength": 100 },
+        "kickoffAt": { "type": "string" },
+        "status": { "type": "string", "enum": ["scheduled", "settled", "void"] },
+        "prizeDescription": { "type": "string", "maxLength": 200 },
+        "weekKey": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["id", "homeTeam", "awayTeam", "kickoffAt", "status"]
+    },
+    "Prediction": {
+      "title": "Prediction",
+      "description": "User 3-leg prediction entry for a soccer match",
+      "type": "object",
+      "properties": {
+        "matchId": { "type": "string", "maxLength": 128 },
+        "uid": { "type": "string", "maxLength": 128 },
+        "displayName": { "type": "string", "maxLength": 100 },
+        "outcome": { "type": "string", "enum": ["HOME", "AWAY", "DRAW"] },
+        "scoreline": { "type": "string", "pattern": "^(0|[1-9][0-9]?):(0|[1-9][0-9]?)$" },
+        "playerName": { "type": "string", "maxLength": 100 },
+        "playerGoals": { "type": "number" },
+        "claimCode": { "type": "string", "maxLength": 100 }
+      },
+      "required": ["matchId", "uid", "outcome", "scoreline", "playerName", "playerGoals"]
     }
   },
   "firestore": {
@@ -80,6 +112,14 @@
     "/promotions/{promoId}": {
       "schema": { "$ref": "#/entities/Promotion" },
       "description": "Cafe promotions managed by owner"
+    },
+    "/prediction_matches/{matchId}": {
+      "schema": { "$ref": "#/entities/PredictionMatch" },
+      "description": "Server Admin managed weekly soccer fixtures"
+    },
+    "/predictions/{predictionId}": {
+      "schema": { "$ref": "#/entities/Prediction" },
+      "description": "Server Admin managed user 3-leg prediction entries"
     }
   }
 }

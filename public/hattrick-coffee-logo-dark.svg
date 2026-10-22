@@ -1,0 +1,179 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 440" width="100%" height="100%">
+  <defs>
+    <!-- Gold Metallic Gradients for Outer Rim & Seams -->
+    <linearGradient id="goldRimDark" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FCE196" />
+      <stop offset="30%" stop-color="#E5BE57" />
+      <stop offset="70%" stop-color="#C9982E" />
+      <stop offset="100%" stop-color="#EAC466" />
+    </linearGradient>
+
+    <!-- Rich Roasted Espresso Facet Gradients -->
+    <linearGradient id="espressoFacetDark2" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#3A2115" />
+      <stop offset="50%" stop-color="#28150D" />
+      <stop offset="100%" stop-color="#140702" />
+    </linearGradient>
+
+    <linearGradient id="espressoFacetMid2" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#4B2A1B" />
+      <stop offset="100%" stop-color="#2E170E" />
+    </linearGradient>
+
+    <!-- Cream Accent Facet Gradients -->
+    <linearGradient id="creamFacetDark" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFFDF9" />
+      <stop offset="60%" stop-color="#F2E6D4" />
+      <stop offset="100%" stop-color="#DCCBB2" />
+    </linearGradient>
+
+    <!-- Oval Bean Silhouette Clip Path -->
+    <clipPath id="ovalBeanClipDark">
+      <ellipse cx="210" cy="220" rx="98" ry="132" />
+    </clipPath>
+
+    <!-- Glow for Dark Background -->
+    <filter id="markGlowDark" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="4" stdDeviation="12" flood-color="#D4AF37" flood-opacity="0.3" />
+    </filter>
+  </defs>
+
+  <!-- ======================================================== -->
+  <!-- 1. LEFT EMBLEM: SOCCER BALL + COFFEE BEAN OVAL MARK      -->
+  <!-- ======================================================== -->
+  <g id="emblem-group-dark" filter="url(#markGlowDark)">
+    
+    <!-- Outer Golden Beveled Frame -->
+    <ellipse cx="210" cy="220" rx="106" ry="140" fill="url(#goldRimDark)" />
+    <ellipse cx="210" cy="220" rx="98" ry="132" fill="#140904" />
+
+    <!-- Clipped Geometric Soccer Ball Panels -->
+    <g clip-path="url(#ovalBeanClipDark)">
+      <!-- Deep Espresso Background -->
+      <rect x="100" y="80" width="220" height="280" fill="#140702" />
+
+      <!-- Left Hemisphere Panels -->
+      <!-- Top Left Outer (Cream Accent) -->
+      <polygon points="175,95 200,122 170,145 138,125 152,98" fill="url(#creamFacetDark)" />
+      <!-- Mid-Left Top (Espresso) -->
+      <polygon points="170,145 200,122 205,175 168,198 135,178" fill="url(#espressoFacetDark2)" />
+      <!-- Far Left Center (Cream Accent) -->
+      <polygon points="138,125 170,145 168,198 128,218 105,175" fill="url(#creamFacetDark)" />
+      <!-- Mid-Left Center (Espresso) -->
+      <polygon points="168,198 205,175 202,240 162,260 128,218" fill="url(#espressoFacetMid2)" />
+      <!-- Lower Left Outer (Cream Accent) -->
+      <polygon points="128,218 162,260 155,308 118,295 108,250" fill="url(#creamFacetDark)" />
+      <!-- Lower Left Center (Espresso) -->
+      <polygon points="162,260 202,240 198,300 165,325 155,308" fill="url(#espressoFacetDark2)" />
+      <!-- Bottom Left Apex (Espresso Dark) -->
+      <polygon points="165,325 198,300 208,348 180,352" fill="#140702" />
+
+      <!-- Right Hemisphere Panels -->
+      <!-- Top Right Outer (Cream Accent) -->
+      <polygon points="220,122 245,95 268,98 282,125 250,145" fill="url(#creamFacetDark)" />
+      <!-- Mid-Right Top (Espresso) -->
+      <polygon points="220,122 250,145 285,178 252,198 215,175" fill="url(#espressoFacetDark2)" />
+      <!-- Far Right Center (Cream Accent) -->
+      <polygon points="250,145 282,125 315,175 292,218 252,198" fill="url(#creamFacetDark)" />
+      <!-- Mid-Right Center (Espresso) -->
+      <polygon points="215,175 252,198 292,218 258,260 218,240" fill="url(#espressoFacetMid2)" />
+      <!-- Lower Right Outer (Cream Accent) -->
+      <polygon points="292,218 312,250 302,295 265,308 258,260" fill="url(#creamFacetDark)" />
+      <!-- Lower Right Center (Espresso) -->
+      <polygon points="218,240 258,260 265,308 255,325 222,300" fill="url(#espressoFacetDark2)" />
+      <!-- Bottom Right Apex (Espresso Dark) -->
+      <polygon points="222,300 255,325 240,352 212,348" fill="#140702" />
+
+      <!-- Fine Soccer Seam Lines -->
+      <g stroke="url(#goldRimDark)" stroke-width="2.2" stroke-linejoin="round" opacity="0.6">
+        <line x1="175" y1="95" x2="200" y2="122" />
+        <line x1="200" y1="122" x2="170" y2="145" />
+        <line x1="170" y1="145" x2="138" y2="125" />
+        <line x1="170" y1="145" x2="168" y2="198" />
+        <line x1="168" y1="198" x2="128" y2="218" />
+        <line x1="168" y1="198" x2="205" y2="175" />
+        <line x1="162" y1="260" x2="128" y2="218" />
+        <line x1="162" y1="260" x2="202" y2="240" />
+        <line x1="162" y1="260" x2="155" y2="308" />
+        <line x1="155" y1="308" x2="165" y2="325" />
+        <line x1="165" y1="325" x2="198" y2="300" />
+
+        <line x1="245" y1="95" x2="220" y2="122" />
+        <line x1="220" y1="122" x2="250" y2="145" />
+        <line x1="250" y1="145" x2="282" y2="125" />
+        <line x1="250" y1="145" x2="252" y2="198" />
+        <line x1="252" y1="198" x2="292" y2="218" />
+        <line x1="252" y1="198" x2="215" y2="175" />
+        <line x1="258" y1="260" x2="292" y2="218" />
+        <line x1="258" y1="260" x2="218" y2="240" />
+        <line x1="258" y1="260" x2="265" y2="308" />
+        <line x1="265" y1="308" x2="255" y2="325" />
+        <line x1="255" y1="325" x2="222" y2="300" />
+      </g>
+
+      <!-- PROMINENT VERTICAL COFFEE BEAN WAVY S-SPLIT (CREAM RIBBON) -->
+      <path d="M 210 88
+               C 220 128, 222 158, 215 198
+               C 208 238, 206 278, 215 318
+               C 218 332, 216 345, 210 352
+               C 205 345, 202 332, 200 318
+               C 193 278, 198 238, 205 198
+               C 209 158, 205 128, 210 88 Z" 
+            fill="url(#creamFacetDark)" 
+            stroke="url(#goldRimDark)" 
+            stroke-width="1.8" />
+
+      <!-- Deep Interior Crease Fissure Line -->
+      <path d="M 210 92
+               C 214 130, 216 160, 210 200
+               C 204 240, 202 280, 210 320
+               C 212 334, 211 344, 210 348" 
+            fill="none" 
+            stroke="#140702" 
+            stroke-width="3" 
+            stroke-linecap="round" />
+    </g>
+
+    <!-- Inner Golden Hairline Ring -->
+    <ellipse cx="210" cy="220" rx="97" ry="131" fill="none" stroke="url(#goldRimDark)" stroke-width="1.5" stroke-opacity="0.7" />
+  </g>
+
+  <!-- ======================================================== -->
+  <!-- 2. RIGHT TYPOGRAPHY LOCKUP (MATCHING REFERENCE FORMAT)   -->
+  <!-- ======================================================== -->
+  <g id="typography-group-dark">
+    
+    <!-- ROW 1: "HATTRICK COFFEE" (Clean Bold Sans-Serif Uppercase) -->
+    <text x="355" 
+          y="200" 
+          font-family="'Plus Jakarta Sans', 'Montserrat', 'Inter', -apple-system, sans-serif" 
+          font-size="52" 
+          font-weight="900" 
+          letter-spacing="0.05em" 
+          fill="#FFFDF9">
+      HATTRICK COFFEE
+    </text>
+
+    <!-- ROW 2: AMHARIC SCRIPT "ሃትሪክ ቡና" -->
+    <text x="355" 
+          y="266" 
+          font-family="'Noto Sans Ethiopic', 'Nyala', 'Abyssinica SIL', sans-serif" 
+          font-size="50" 
+          font-weight="900" 
+          letter-spacing="0.06em" 
+          fill="url(#goldRimDark)">
+      ሃትሪክ ቡና
+    </text>
+
+    <!-- ROW 2 (ADJACENT): "HAWASSA, ETHIOPIA" -->
+    <text x="630" 
+          y="264" 
+          font-family="'Plus Jakarta Sans', 'Inter', -apple-system, sans-serif" 
+          font-size="21" 
+          font-weight="700" 
+          letter-spacing="0.14em" 
+          fill="#D4AF37">
+      HAWASSA, ETHIOPIA
+    </text>
+  </g>
+</svg>

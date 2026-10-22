@@ -7,7 +7,9 @@ import {
   saveUserPrediction,
   getMatchStats,
   getMatchWinners,
-  verifyUserToken
+  verifyUserToken,
+  getUserAllPredictions,
+  verifyPredictionClaim
 } from "../db.js";
 
 const router = Router();
@@ -117,7 +119,43 @@ router.get("/match/:id", async (req, res) => {
   }
 });
 
-// 4. POST /api/predictions
+// 4. GET /api/predictions/my-predictions
+// Returns all predictions submitted by the authenticated user across all matches
+router.get("/my-predictions", async (req, res) => {
+  try {
+    const token = extractBearerToken(req);
+    if (!token) {
+      return res.status(401).json({ error: "Unauthorized: Sign in required to view your predictions." });
+    }
+
+    const user = await verifyUserToken(token);
+    if (!user || !user.uid) {
+      return res.status(401).json({ error: "Invalid or expired session. Please sign in again." });
+    }
+
+    const predictions = await getUserAllPredictions(user.uid);
+    res.json({ success: true, predictions, serverNow: new Date().toISOString() });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || "Failed to fetch user predictions" });
+  }
+});
+
+// 5. GET /api/predictions/claim/:code
+// Public verification lookup for coffee shop counter
+router.get("/claim/:code", async (req, res) => {
+  try {
+    const code = req.params.code;
+    const result = await verifyPredictionClaim(code);
+    if (!result.success) {
+      return res.status(404).json({ error: result.error });
+    }
+    res.json({ success: true, ...result });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || "Failed to verify claim code" });
+  }
+});
+
+// 6. POST /api/predictions
 // Submit or edit user prediction before kickoff.
 // Requires valid Google ID token via Authorization: Bearer <token>.
 // Server enforces verified uid and server-side kickoff lock check.

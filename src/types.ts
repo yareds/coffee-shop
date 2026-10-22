@@ -111,6 +111,16 @@ export interface MatchResult {
   playerGoals: Record<string, number>;
 }
 
+export interface MatchAuditEntry {
+  id: string;
+  changedAt: string;
+  adminEmail: string;
+  reason: string;
+  previousResult?: MatchResult;
+  newResult: MatchResult;
+  affectedWinnersCount?: number;
+}
+
 export interface PredictionMatch {
   id: string;
   homeTeam: string;
@@ -123,6 +133,7 @@ export interface PredictionMatch {
   result?: MatchResult;
   weekKey: string; // ISO week e.g. "2026-W43"
   createdAt: string;
+  auditHistory?: MatchAuditEntry[];
 }
 
 export interface Prediction {
@@ -141,6 +152,13 @@ export interface Prediction {
   legsCorrect?: number; // 0-3
   grandPrizeWinner?: boolean;
   prizeCollected?: boolean;
+  prizeCollectedAt?: string;
+  collectedBy?: string;
+  claimCode?: string;
+}
+
+export interface UserPredictionSummary extends Prediction {
+  match?: PredictionMatch;
 }
 
 export interface PredictionStats {
@@ -150,5 +168,6 @@ export interface PredictionStats {
   leg3CorrectCount: number;
   grandPrizeWinnersCount: number;
 }
+
 
 

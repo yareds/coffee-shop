@@ -7,12 +7,17 @@ import {
   editPromotion,
   deletePromotion,
   getAllPredictionMatches,
+  getPredictionMatch,
   savePredictionMatch,
   voidPredictionMatch,
   settlePredictionMatch,
+  correctPredictionMatchResult,
   getMatchStats,
   getMatchWinners,
   markPredictionPrizeCollected,
+  verifyPredictionClaim,
+  redeemPredictionPrize,
+  getAllPredictionsAdmin,
   getRegisteredUsers,
   resetUserSpin,
   deleteRegisteredUser,
@@ -283,7 +288,8 @@ router.post("/predictions/collect-prize", adminAuthMiddleware, async (req, res) 
     }
 
     const isCollected = collected !== undefined ? Boolean(collected) : true;
-    const result = await markPredictionPrizeCollected(matchId, uid, isCollected);
+    const adminEmail = (req.headers["x-admin-email"] as string) || "yared.abegaz@gmail.com";
+    const result = await markPredictionPrizeCollected(matchId, uid, isCollected, adminEmail);
     if (!result.success) {
       return res.status(400).json({ error: result.error });
     }
@@ -292,6 +298,95 @@ router.post("/predictions/collect-prize", adminAuthMiddleware, async (req, res) 
     res.json({ success: true, winners, message: `Prize status updated for user.` });
   } catch (err: any) {
     res.status(500).json({ error: err.message || "Failed to mark prize collected" });
+  }
+});
+
+// Admin All Predictions List with Filters
+router.get("/predictions/all", adminAuthMiddleware, async (req, res) => {
+  try {
+    const { weekKey, matchId, status, isWinner, search } = req.query;
+    const predictions = await getAllPredictionsAdmin({
+      weekKey: weekKey as string,
+      matchId: matchId as string,
+      status: status as string,
+      isWinner: isWinner !== undefined ? isWinner === "true" : undefined,
+      search: search as string
+    });
+    res.json({ success: true, predictions });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || "Failed to fetch predictions" });
+  }
+});
+
+// Admin Verify Claim Code
+router.post("/predictions/verify-claim", adminAuthMiddleware, async (req, res) => {
+  try {
+    const { claimCode } = req.body;
+    if (!claimCode) {
+      return res.status(400).json({ error: "Claim code is required." });
+    }
+    const result = await verifyPredictionClaim(claimCode);
+    if (!result.success) {
+      return res.status(404).json({ error: result.error });
+    }
+    res.json({ success: true, ...result });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || "Failed to verify claim code" });
+  }
+});
+
+// Admin Redeem Prize with Duplicate Protection
+router.post("/predictions/redeem-prize", adminAuthMiddleware, async (req, res) => {
+  try {
+    const { claimCode } = req.body;
+    if (!claimCode) {
+      return res.status(400).json({ error: "Claim code is required." });
+    }
+    const adminEmail = (req.headers["x-admin-email"] as string) || "yared.abegaz@gmail.com";
+    const result = await redeemPredictionPrize(claimCode, adminEmail);
+    if (!result.success) {
+      return res.status(400).json({ error: result.error });
+    }
+    res.json({ success: true, prediction: result.prediction, message: "Prize successfully marked as redeemed." });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || "Failed to redeem prize" });
+  }
+});
+
+// Admin Correct Match Result with Audit History
+router.post("/predictions/correct-result", adminAuthMiddleware, async (req, res) => {
+  try {
+    const { matchId, homeGoals, awayGoals, playerGoals, reason } = req.body;
+    if (!matchId) {
+      return res.status(400).json({ error: "matchId is required" });
+    }
+    const hGoals = Number(homeGoals);
+    const aGoals = Number(awayGoals);
+    if (isNaN(hGoals) || isNaN(aGoals) || hGoals < 0 || aGoals < 0) {
+      return res.status(400).json({ error: "homeGoals and awayGoals must be non-negative integers." });
+    }
+    const adminEmail = (req.headers["x-admin-email"] as string) || "yared.abegaz@gmail.com";
+    const result = await correctPredictionMatchResult(
+      matchId,
+      Math.floor(hGoals),
+      Math.floor(aGoals),
+      playerGoals || {},
+      reason || "Score correction / VAR adjustment",
+      adminEmail
+    );
+    if (!result.success) {
+      return res.status(400).json({ error: result.error });
+    }
+    const winners = await getMatchWinners(matchId);
+    res.json({
+      success: true,
+      match: result.match,
+      stats: result.stats,
+      winners,
+      message: "Match result corrected and audited successfully. Predictions re-evaluated."
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || "Failed to correct match result" });
   }
 });
 
