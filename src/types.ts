@@ -100,3 +100,55 @@ export interface Order {
   isCustomBrew?: boolean;
 }
 
+export interface MatchPlayer {
+  name: string;
+  team: "home" | "away";
+}
+
+export interface MatchResult {
+  homeGoals: number;
+  awayGoals: number;
+  playerGoals: Record<string, number>;
+}
+
+export interface PredictionMatch {
+  id: string;
+  homeTeam: string;
+  awayTeam: string;
+  competition: string;
+  kickoffAt: string; // UTC ISO timestamp
+  status: "scheduled" | "settled" | "void";
+  prizeDescription: string;
+  players: MatchPlayer[];
+  result?: MatchResult;
+  weekKey: string; // ISO week e.g. "2026-W43"
+  createdAt: string;
+}
+
+export interface Prediction {
+  matchId: string;
+  uid: string;
+  displayName: string;
+  outcome: "HOME" | "AWAY" | "DRAW";
+  scoreline: string; // strictly "Home:Away"
+  playerName: string;
+  playerGoals: number; // integer 0-10
+  submittedAt: string;
+  updatedAt: string;
+  leg1Correct?: boolean;
+  leg2Correct?: boolean;
+  leg3Correct?: boolean;
+  legsCorrect?: number; // 0-3
+  grandPrizeWinner?: boolean;
+  prizeCollected?: boolean;
+}
+
+export interface PredictionStats {
+  totalEntries: number;
+  leg1CorrectCount: number;
+  leg2CorrectCount: number;
+  leg3CorrectCount: number;
+  grandPrizeWinnersCount: number;
+}
+
+

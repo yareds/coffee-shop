@@ -13,7 +13,8 @@ import ownerRouter from "./server/routes/owner.js";
 import wallRouter from "./server/routes/wall.js";
 import eventsRouter from "./server/routes/events.js";
 import ethiopiaRouter, { ethiopianRegions } from "./server/routes/ethiopia.js";
-import { getPromotions, getRafflePrizes } from "./server/db.js";
+import predictionsRouter from "./server/routes/predictions.js";
+import { getPromotions } from "./server/db.js";
 
 dotenv.config();
 
@@ -23,6 +24,7 @@ const PORT = 3000;
 app.use(express.json());
 
 // API Routes
+app.use("/api/predictions", predictionsRouter);
 app.use("/api/menu", menuRouter);
 app.use("/api/orders", ordersRouter);
 app.use("/api/order", ordersRouter); // Backwards compatibility for /api/order/custom
@@ -41,16 +43,6 @@ app.get("/api/promotions", async (req, res) => {
     res.json({ success: true, promotions: activePromos });
   } catch (err: any) {
     res.status(500).json({ error: err.message || "Failed to fetch promotions" });
-  }
-});
-
-// Backwards compatibility for GET /api/raffle/prizes
-app.get("/api/raffle/prizes", async (req, res) => {
-  try {
-    const prizes = await getRafflePrizes();
-    res.json(prizes || []);
-  } catch (err: any) {
-    res.status(500).json({ error: err.message || "Failed to fetch prizes" });
   }
 });
 

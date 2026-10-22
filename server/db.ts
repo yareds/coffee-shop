@@ -5,11 +5,56 @@ import { initializeApp, getApps } from "firebase-admin/app";
 import type { App } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 import type { Firestore, CollectionReference } from "firebase-admin/firestore";
+import { getAuth } from "firebase-admin/auth";
+import type { Auth } from "firebase-admin/auth";
 
 // Process-level safety net for unhandled credential resolution rejections
 process.on("unhandledRejection", (err) => {
   console.error("[Unhandled Rejection]", err);
 });
+
+export interface MatchPlayer {
+  name: string;
+  team: "home" | "away";
+}
+
+export interface MatchResult {
+  homeGoals: number;
+  awayGoals: number;
+  playerGoals: Record<string, number>;
+}
+
+export interface PredictionMatch {
+  id: string;
+  homeTeam: string;
+  awayTeam: string;
+  competition: string;
+  kickoffAt: string; // UTC ISO timestamp
+  status: "scheduled" | "settled" | "void";
+  prizeDescription: string;
+  players: MatchPlayer[];
+  result?: MatchResult;
+  weekKey: string; // ISO week e.g. "2026-W43"
+  createdAt: string;
+}
+
+export interface Prediction {
+  matchId: string;
+  uid: string;
+  displayName: string;
+  outcome: "HOME" | "AWAY" | "DRAW";
+  scoreline: string; // strictly "Home:Away"
+  playerName: string;
+  playerGoals: number; // integer 0-10
+  submittedAt: string;
+  updatedAt: string;
+  leg1Correct?: boolean;
+  leg2Correct?: boolean;
+  leg3Correct?: boolean;
+  legsCorrect?: number; // 0-3
+  grandPrizeWinner?: boolean;
+  prizeCollected?: boolean;
+}
 
 export interface MenuItem {
   id: string;
@@ -60,14 +105,6 @@ export interface Promotion {
   active: boolean;
   desc: string;
   image: string;
-}
-
-export interface RafflePrize {
-  id: string;
-  name: string;
-  desc: string;
-  active: boolean;
-  color: string;
 }
 
 export interface RegisteredUser {
@@ -139,7 +176,8 @@ export interface AppState {
   promotions: Promotion[];
   loyaltyProfile: LoyaltyProfile;
   loyaltyProfiles: Record<string, LoyaltyProfile>;
-  rafflePrizes: RafflePrize[];
+  predictionMatches: PredictionMatch[];
+  predictions: Prediction[];
   registeredUsers: RegisteredUser[];
   orders: Order[];
   shopStats: ShopStats;
@@ -322,14 +360,30 @@ export const INITIAL_STATE: AppState = {
     rafflePrize: "",
   },
   loyaltyProfiles: {},
-  rafflePrizes: [
-    { id: "rp1", name: "Traditional Jebena Brew (Abol)", desc: "Rich and spiced ceremonial pour", active: true, color: "bg-[#c89d7c] text-black" },
-    { id: "rp2", name: "Yirgacheffe Pour Over", desc: "Floral, bright jasmine & citrus cup", active: true, color: "bg-[#2c221e] text-white border border-[#c89d7c]/30" },
-    { id: "rp3", name: "Spiced Cardamom Macchiato", desc: "Creamy espresso with house-infused cardamom", active: true, color: "bg-[#c89d7c] text-black" },
-    { id: "rp4", name: "Sidama Natural Hand-Brew", desc: "Blueberry jam acidity and heavy body", active: true, color: "bg-[#2c221e] text-white border border-[#c89d7c]/30" },
-    { id: "rp5", name: "Guji Honey Cold Brew", desc: "Sweet, refreshing forest canopy beans", active: true, color: "bg-[#c89d7c] text-black" },
-    { id: "rp6", name: "Harrar Double Espresso", desc: "Deep chocolate and wild berry undertones", active: true, color: "bg-[#2c221e] text-white border border-[#c89d7c]/30" }
+  predictionMatches: [
+    {
+      id: "match_w43_2026",
+      homeTeam: "Arsenal",
+      awayTeam: "Liverpool",
+      competition: "Premier Matchday Showcase",
+      kickoffAt: "2026-10-24T16:30:00.000Z",
+      status: "scheduled",
+      prizeDescription: "1 Year of Free Buna Single-Origin Coffee & Official Leather Football",
+      players: [
+        { name: "Bukayo Saka", team: "home" },
+        { name: "Martin Odegaard", team: "home" },
+        { name: "Kai Havertz", team: "home" },
+        { name: "Gabriel Martinelli", team: "home" },
+        { name: "Mohamed Salah", team: "away" },
+        { name: "Luis Diaz", team: "away" },
+        { name: "Darwin Nunez", team: "away" },
+        { name: "Cody Gakpo", team: "away" }
+      ],
+      weekKey: "2026-W43",
+      createdAt: "2026-10-21T00:00:00.000Z"
+    }
   ],
+  predictions: [],
   registeredUsers: [
     { id: "u1", name: "Abebe Kebede", email: "abebe@buna.com", phone: "+15550199111", hasSpun: true, hasCollected: true, prize: "Traditional Jebena Brew (Abol)", date: "2026-07-20 09:30 AM", deviceId: "device_1" },
     { id: "u2", name: "Martha Tesfaye", email: "martha@buna.com", phone: "+15550199222", hasSpun: true, hasCollected: true, prize: "Yirgacheffe Pour Over", date: "2026-07-20 10:15 AM", deviceId: "device_2" }
@@ -414,12 +468,13 @@ export type CollectionsMap = {
   menuItems: CollectionReference;
   events: CollectionReference;
   promotions: CollectionReference;
-  rafflePrizes: CollectionReference;
   registeredUsers: CollectionReference;
   orders: CollectionReference;
   loyaltyProfiles: CollectionReference;
   shopStats: CollectionReference;
   communityPosts: CollectionReference;
+  predictionMatches: CollectionReference;
+  predictions: CollectionReference;
 };
 
 let initialized = false;
@@ -430,6 +485,18 @@ let collectionsInstance: CollectionsMap | null = null;
 let hasInitiatedSeed = false;
 let hasSeeded = false;
 let seedPromise: Promise<void> | null = null;
+
+export function getAdminAuth(): Auth | null {
+  getAdminDb();
+  if (adminApp) {
+    try {
+      return getAuth(adminApp);
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
 
 export function getAdminDb(): Firestore | null {
   if (initialized) {
@@ -474,12 +541,13 @@ export function getAdminDb(): Firestore | null {
         menuItems: adminDb.collection("menuItems"),
         events: adminDb.collection("events"),
         promotions: adminDb.collection("promotions"),
-        rafflePrizes: adminDb.collection("rafflePrizes"),
         registeredUsers: adminDb.collection("registeredUsers"),
         orders: adminDb.collection("orders"),
         loyaltyProfiles: adminDb.collection("loyaltyProfiles"),
         shopStats: adminDb.collection("shopStats"),
         communityPosts: adminDb.collection("community_posts"),
+        predictionMatches: adminDb.collection("predictionMatches"),
+        predictions: adminDb.collection("predictions"),
       };
     } catch (initErr: any) {
       isFirestoreAvailable = false;
@@ -562,13 +630,13 @@ export async function seedDatabaseIfEmpty(): Promise<void> {
         await batch.commit();
       }
 
-      // 4. Raffle Prizes
-      const raffleSnap = await cols.rafflePrizes.limit(1).get();
-      if (raffleSnap.empty) {
-        console.log("[Firestore Admin] Seeding rafflePrizes collection...");
+      // 4. Prediction Matches
+      const matchSnap = await cols.predictionMatches.limit(1).get();
+      if (matchSnap.empty) {
+        console.log("[Firestore Admin] Seeding predictionMatches collection...");
         const batch = db.batch();
-        for (const prize of INITIAL_STATE.rafflePrizes) {
-          batch.set(cols.rafflePrizes.doc(prize.id), prize);
+        for (const m of INITIAL_STATE.predictionMatches) {
+          batch.set(cols.predictionMatches.doc(m.id), m);
         }
         await batch.commit();
       }
@@ -912,102 +980,578 @@ export async function deletePromotion(id: string): Promise<Promotion[]> {
 }
 
 // ==========================================
-// 4. Raffle Prizes API Helpers
+// 4. Weekly Prediction Game Helpers
 // ==========================================
-export async function getRafflePrizes(): Promise<RafflePrize[]> {
+
+export function getIsoWeekKey(d: Date): string {
+  const date = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+  const dayNum = date.getUTCDay() || 7;
+  date.setUTCDate(date.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
+  const weekNo = Math.ceil((((date.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+  return `${date.getUTCFullYear()}-W${String(weekNo).padStart(2, "0")}`;
+}
+
+export function formatWinnerName(name: string): string {
+  if (!name) return "Anonymous E.";
+  const parts = name.trim().split(/\s+/);
+  if (parts.length === 1) {
+    return parts[0].charAt(0).toUpperCase() + parts[0].slice(1);
+  }
+  const firstName = parts[0];
+  const lastInitial = parts[parts.length - 1].charAt(0).toUpperCase();
+  return `${firstName} ${lastInitial}.`;
+}
+
+export async function verifyUserToken(token: string): Promise<{ uid: string; displayName: string; email?: string } | null> {
+  const auth = getAdminAuth();
+  if (auth) {
+    try {
+      const decoded = await auth.verifyIdToken(token);
+      return {
+        uid: decoded.uid,
+        displayName: decoded.name || decoded.email?.split("@")[0] || "Explorer",
+        email: decoded.email
+      };
+    } catch (e: any) {
+      console.warn("[Auth] Firebase Admin token verification failed:", e.message);
+      if (!checkHasLikelyCredentials()) {
+        try {
+          const parts = token.split(".");
+          if (parts.length === 3) {
+            const payload = JSON.parse(Buffer.from(parts[1], "base64").toString("utf8"));
+            if (payload.sub || payload.user_id) {
+              return {
+                uid: payload.sub || payload.user_id,
+                displayName: payload.name || payload.email?.split("@")[0] || "Explorer",
+                email: payload.email
+              };
+            }
+          }
+        } catch {
+          // ignore
+        }
+      }
+      return null;
+    }
+  }
+
+  // Fallback for offline dev container when Admin SDK cannot connect
+  try {
+    const parts = token.split(".");
+    if (parts.length === 3) {
+      const payload = JSON.parse(Buffer.from(parts[1], "base64").toString("utf8"));
+      if (payload.sub || payload.user_id) {
+        return {
+          uid: payload.sub || payload.user_id,
+          displayName: payload.name || payload.email?.split("@")[0] || "Explorer",
+          email: payload.email
+        };
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return null;
+}
+
+export async function getAllPredictionMatches(): Promise<PredictionMatch[]> {
   getAdminDb();
   if (isFirestoreAvailable && COLLECTIONS) {
     try {
-      const snap = await COLLECTIONS.rafflePrizes.get();
+      const snap = await COLLECTIONS.predictionMatches.orderBy("kickoffAt", "desc").get();
       if (!snap.empty) {
-        const prizes = snap.docs.map(doc => doc.data() as RafflePrize);
-        memoryState.rafflePrizes = prizes;
-        return prizes;
+        const matches = snap.docs.map(doc => doc.data() as PredictionMatch);
+        memoryState.predictionMatches = matches;
+        return matches;
       }
     } catch (err) {
       isFirestoreAvailable = false;
-      logFirestoreFallback("getRafflePrizes", err);
+      logFirestoreFallback("getAllPredictionMatches", err);
     }
   }
-  return memoryState.rafflePrizes;
+  return memoryState.predictionMatches;
 }
 
-export async function addRafflePrize(prize: Omit<RafflePrize, "id">): Promise<RafflePrize[]> {
+export async function getPredictionMatch(matchId: string): Promise<PredictionMatch | null> {
   getAdminDb();
-  const newPrize: RafflePrize = {
-    ...prize,
-    id: "rp_" + Date.now(),
-    active: true,
-    color: prize.color || (memoryState.rafflePrizes.length % 2 === 0 ? "bg-[#c89d7c] text-black" : "bg-[#2c221e] text-white border border-[#c89d7c]/30")
+  if (isFirestoreAvailable && COLLECTIONS) {
+    try {
+      const docSnap = await COLLECTIONS.predictionMatches.doc(matchId).get();
+      if (docSnap.exists) {
+        return docSnap.data() as PredictionMatch;
+      }
+    } catch (err) {
+      isFirestoreAvailable = false;
+      logFirestoreFallback("getPredictionMatch", err);
+    }
+  }
+  return memoryState.predictionMatches.find(m => m.id === matchId) || null;
+}
+
+export async function getFeaturedMatch(): Promise<{ match: PredictionMatch | null; totalEntries: number; serverNow: string }> {
+  getAdminDb();
+  const serverNow = new Date().toISOString();
+  const allMatches = await getAllPredictionMatches();
+  
+  // Prefer active scheduled match nearest to now, otherwise most recent settled match
+  let match = allMatches.find(m => m.status === "scheduled");
+  if (!match) {
+    match = allMatches[0] || null;
+  }
+
+  let totalEntries = 0;
+  if (match) {
+    if (isFirestoreAvailable && COLLECTIONS) {
+      try {
+        const snap = await COLLECTIONS.predictions.where("matchId", "==", match.id).get();
+        totalEntries = snap.size;
+      } catch (err) {
+        isFirestoreAvailable = false;
+        logFirestoreFallback("getFeaturedMatch entries", err);
+        totalEntries = memoryState.predictions.filter(p => p.matchId === match?.id).length;
+      }
+    } else {
+      totalEntries = memoryState.predictions.filter(p => p.matchId === match?.id).length;
+    }
+  }
+
+  return { match, totalEntries, serverNow };
+}
+
+export async function savePredictionMatch(matchData: {
+  id?: string;
+  homeTeam: string;
+  awayTeam: string;
+  competition: string;
+  kickoffAt: string;
+  prizeDescription: string;
+  players: MatchPlayer[];
+}): Promise<{ success: boolean; match?: PredictionMatch; warning?: string; error?: string }> {
+  getAdminDb();
+
+  const kickoffDate = new Date(matchData.kickoffAt);
+  if (isNaN(kickoffDate.getTime())) {
+    return { success: false, error: "Invalid kickoffAt timestamp." };
+  }
+
+  let warning: string | undefined;
+  // Saturday is day 6 in UTC
+  if (kickoffDate.getUTCDay() !== 6) {
+    warning = "Notice: The kickoff date is not on a Saturday.";
+  }
+
+  const weekKey = getIsoWeekKey(kickoffDate);
+  const isEditing = Boolean(matchData.id);
+  const matchId = matchData.id || "match_" + Date.now();
+
+  if (isEditing) {
+    const existing = await getPredictionMatch(matchId);
+    if (!existing) {
+      return { success: false, error: "Match not found to edit." };
+    }
+    const now = new Date();
+    if (now >= new Date(existing.kickoffAt)) {
+      return { success: false, error: "Cannot edit match after kickoff." };
+    }
+  }
+
+  const match: PredictionMatch = {
+    id: matchId,
+    homeTeam: matchData.homeTeam.trim(),
+    awayTeam: matchData.awayTeam.trim(),
+    competition: matchData.competition.trim() || "Premier Matchday",
+    kickoffAt: kickoffDate.toISOString(),
+    status: "scheduled",
+    prizeDescription: matchData.prizeDescription.trim() || "1 Year of Free Buna Single-Origin Coffee",
+    players: matchData.players,
+    weekKey,
+    createdAt: new Date().toISOString()
   };
 
-  memoryState.rafflePrizes.push(newPrize);
+  const idx = memoryState.predictionMatches.findIndex(m => m.id === matchId);
+  if (idx >= 0) {
+    memoryState.predictionMatches[idx] = { ...memoryState.predictionMatches[idx], ...match };
+  } else {
+    memoryState.predictionMatches.unshift(match);
+  }
 
   if (isFirestoreAvailable && COLLECTIONS) {
     try {
-      await COLLECTIONS.rafflePrizes.doc(newPrize.id).set(newPrize);
+      await COLLECTIONS.predictionMatches.doc(matchId).set(match, { merge: true });
     } catch (err) {
       isFirestoreAvailable = false;
-      logFirestoreFallback("addRafflePrize", err);
+      logFirestoreFallback("savePredictionMatch", err);
     }
   }
 
-  return getRafflePrizes();
+  return { success: true, match, warning };
 }
 
-export async function editRafflePrize(id: string, updates: Partial<RafflePrize>): Promise<RafflePrize[]> {
+export async function voidPredictionMatch(matchId: string): Promise<{ success: boolean; match?: PredictionMatch; error?: string }> {
   getAdminDb();
-  memoryState.rafflePrizes = memoryState.rafflePrizes.map(p =>
-    p.id === id ? { ...p, ...updates } : p
-  );
+  const match = await getPredictionMatch(matchId);
+  if (!match) {
+    return { success: false, error: "Match not found." };
+  }
+
+  match.status = "void";
+  const idx = memoryState.predictionMatches.findIndex(m => m.id === matchId);
+  if (idx >= 0) {
+    memoryState.predictionMatches[idx].status = "void";
+  }
 
   if (isFirestoreAvailable && COLLECTIONS) {
     try {
-      await COLLECTIONS.rafflePrizes.doc(id).set(updates, { merge: true });
+      await COLLECTIONS.predictionMatches.doc(matchId).set({ status: "void" }, { merge: true });
     } catch (err) {
       isFirestoreAvailable = false;
-      logFirestoreFallback("editRafflePrize", err);
+      logFirestoreFallback("voidPredictionMatch", err);
     }
   }
 
-  return getRafflePrizes();
+  return { success: true, match };
 }
 
-export async function toggleRafflePrize(id: string): Promise<RafflePrize[]> {
+export async function getUserPrediction(matchId: string, uid: string): Promise<Prediction | null> {
   getAdminDb();
-  const current = memoryState.rafflePrizes.find(p => p.id === id);
-  const newActive = current ? !current.active : false;
-
-  memoryState.rafflePrizes = memoryState.rafflePrizes.map(p =>
-    p.id === id ? { ...p, active: newActive } : p
-  );
-
+  const docId = `${matchId}_${uid}`;
   if (isFirestoreAvailable && COLLECTIONS) {
     try {
-      await COLLECTIONS.rafflePrizes.doc(id).set({ active: newActive }, { merge: true });
+      const snap = await COLLECTIONS.predictions.doc(docId).get();
+      if (snap.exists) {
+        return snap.data() as Prediction;
+      }
     } catch (err) {
       isFirestoreAvailable = false;
-      logFirestoreFallback("toggleRafflePrize", err);
+      logFirestoreFallback("getUserPrediction", err);
     }
   }
-
-  return getRafflePrizes();
+  return memoryState.predictions.find(p => p.matchId === matchId && p.uid === uid) || null;
 }
 
-export async function deleteRafflePrize(id: string): Promise<RafflePrize[]> {
-  getAdminDb();
-  memoryState.rafflePrizes = memoryState.rafflePrizes.filter(p => p.id !== id);
+export async function saveUserPrediction(
+  matchId: string,
+  uid: string,
+  displayName: string,
+  data: {
+    outcome: "HOME" | "AWAY" | "DRAW";
+    scoreline: string;
+    playerName: string;
+    playerGoals: number;
+  }
+): Promise<{ success: boolean; status?: number; error?: string; prediction?: Prediction; serverNow: string }> {
+  const db = getAdminDb();
+  const serverNow = new Date().toISOString();
 
-  if (isFirestoreAvailable && COLLECTIONS) {
+  // Validate Leg 1
+  if (!["HOME", "AWAY", "DRAW"].includes(data.outcome)) {
+    return { success: false, status: 400, error: "Invalid outcome. Must be HOME, AWAY, or DRAW.", serverNow };
+  }
+
+  // Validate Leg 2: strictly string "Home:Away" with /^(0|[1-9][0-9]?):(0|[1-9][0-9]?)$/
+  const scorelinePattern = /^(0|[1-9][0-9]?):(0|[1-9][0-9]?)$/;
+  if (!scorelinePattern.test(data.scoreline)) {
+    return { success: false, status: 400, error: "Invalid scoreline format. Must be strictly 'Home:Away' (e.g. '3:1' or '0:0' without spaces or leading zeros).", serverNow };
+  }
+
+  // Validate Leg 3
+  const playerGoals = Number(data.playerGoals);
+  if (!Number.isInteger(playerGoals) || playerGoals < 0 || playerGoals > 10) {
+    return { success: false, status: 400, error: "Invalid player goals. Must be an integer between 0 and 10.", serverNow };
+  }
+
+  const docId = `${matchId}_${uid}`;
+
+  // Firestore transaction if available
+  if (isFirestoreAvailable && db && COLLECTIONS) {
     try {
-      await COLLECTIONS.rafflePrizes.doc(id).delete();
-    } catch (err) {
+      const result = await db.runTransaction(async (transaction) => {
+        const matchRef = COLLECTIONS.predictionMatches.doc(matchId);
+        const matchSnap = await transaction.get(matchRef);
+        if (!matchSnap.exists) {
+          return { success: false, status: 404, error: "Match not found." };
+        }
+        const match = matchSnap.data() as PredictionMatch;
+
+        if (match.status !== "scheduled") {
+          return { success: false, status: 400, error: `Match is currently ${match.status} and cannot accept predictions.` };
+        }
+
+        const now = new Date();
+        const kickoff = new Date(match.kickoffAt);
+        if (now >= kickoff) {
+          return { success: false, status: 403, error: "Kickoff has passed. Predictions for this match are locked." };
+        }
+
+        const isPlayerValid = match.players.some(p => p.name.toLowerCase() === data.playerName.toLowerCase());
+        if (!isPlayerValid) {
+          return { success: false, status: 400, error: "Selected player is not in this match roster." };
+        }
+
+        const predRef = COLLECTIONS.predictions.doc(docId);
+        const existingSnap = await transaction.get(predRef);
+        const existingData = existingSnap.exists ? (existingSnap.data() as Prediction) : null;
+        const nowIso = now.toISOString();
+
+        const prediction: Prediction = {
+          matchId,
+          uid,
+          displayName: displayName || "Explorer",
+          outcome: data.outcome,
+          scoreline: data.scoreline,
+          playerName: data.playerName,
+          playerGoals,
+          submittedAt: existingData ? existingData.submittedAt : nowIso,
+          updatedAt: nowIso
+        };
+
+        transaction.set(predRef, prediction);
+        return { success: true, prediction };
+      });
+
+      if (result.success && result.prediction) {
+        const memIdx = memoryState.predictions.findIndex(p => p.matchId === matchId && p.uid === uid);
+        if (memIdx >= 0) {
+          memoryState.predictions[memIdx] = result.prediction;
+        } else {
+          memoryState.predictions.push(result.prediction);
+        }
+      }
+      return { ...result, serverNow };
+    } catch (err: any) {
       isFirestoreAvailable = false;
-      logFirestoreFallback("deleteRafflePrize", err);
+      logFirestoreFallback("saveUserPrediction transaction", err);
     }
   }
 
-  return getRafflePrizes();
+  // Memory fallback
+  const match = memoryState.predictionMatches.find(m => m.id === matchId);
+  if (!match) {
+    return { success: false, status: 404, error: "Match not found.", serverNow };
+  }
+  if (match.status !== "scheduled") {
+    return { success: false, status: 400, error: `Match is ${match.status} and cannot accept predictions.`, serverNow };
+  }
+
+  const now = new Date();
+  const kickoff = new Date(match.kickoffAt);
+  if (now >= kickoff) {
+    return { success: false, status: 403, error: "Kickoff has passed. Predictions for this match are locked.", serverNow };
+  }
+
+  const isPlayerValid = match.players.some(p => p.name.toLowerCase() === data.playerName.toLowerCase());
+  if (!isPlayerValid) {
+    return { success: false, status: 400, error: "Selected player is not in this match roster.", serverNow };
+  }
+
+  const nowIso = now.toISOString();
+  const existingIndex = memoryState.predictions.findIndex(p => p.matchId === matchId && p.uid === uid);
+  const existingPred = existingIndex >= 0 ? memoryState.predictions[existingIndex] : null;
+
+  const prediction: Prediction = {
+    matchId,
+    uid,
+    displayName: displayName || "Explorer",
+    outcome: data.outcome,
+    scoreline: data.scoreline,
+    playerName: data.playerName,
+    playerGoals,
+    submittedAt: existingPred ? existingPred.submittedAt : nowIso,
+    updatedAt: nowIso
+  };
+
+  if (existingIndex >= 0) {
+    memoryState.predictions[existingIndex] = prediction;
+  } else {
+    memoryState.predictions.push(prediction);
+  }
+
+  return { success: true, prediction, serverNow };
+}
+
+export async function settlePredictionMatch(
+  matchId: string,
+  homeGoals: number,
+  awayGoals: number,
+  playerGoals: Record<string, number>
+): Promise<{ success: boolean; match?: PredictionMatch; stats?: any; error?: string }> {
+  const db = getAdminDb();
+  const match = await getPredictionMatch(matchId);
+  if (!match) {
+    return { success: false, error: "Match not found." };
+  }
+
+  if (match.status === "void") {
+    return { success: false, error: "Cannot settle a void match." };
+  }
+
+  const actualOutcome = homeGoals > awayGoals ? "HOME" : homeGoals < awayGoals ? "AWAY" : "DRAW";
+  const exactScoreline = `${homeGoals}:${awayGoals}`;
+
+  // Fetch all predictions for this match
+  let predictions: Prediction[] = [];
+  if (isFirestoreAvailable && COLLECTIONS) {
+    try {
+      const snap = await COLLECTIONS.predictions.where("matchId", "==", matchId).get();
+      predictions = snap.docs.map(d => d.data() as Prediction);
+    } catch (err) {
+      isFirestoreAvailable = false;
+      logFirestoreFallback("settlePredictionMatch get preds", err);
+      predictions = memoryState.predictions.filter(p => p.matchId === matchId);
+    }
+  } else {
+    predictions = memoryState.predictions.filter(p => p.matchId === matchId);
+  }
+
+  let leg1CorrectCount = 0;
+  let leg2CorrectCount = 0;
+  let leg3CorrectCount = 0;
+  let grandPrizeWinnersCount = 0;
+
+  const settledPredictions: Prediction[] = predictions.map(p => {
+    const leg1Correct = p.outcome === actualOutcome;
+    const leg2Correct = p.scoreline === exactScoreline;
+    const expectedGoals = Number(playerGoals[p.playerName] ?? 0);
+    const leg3Correct = Number(p.playerGoals) === expectedGoals;
+    const legsCorrect = (leg1Correct ? 1 : 0) + (leg2Correct ? 1 : 0) + (leg3Correct ? 1 : 0);
+    const grandPrizeWinner = legsCorrect === 3;
+
+    if (leg1Correct) leg1CorrectCount++;
+    if (leg2Correct) leg2CorrectCount++;
+    if (leg3Correct) leg3CorrectCount++;
+    if (grandPrizeWinner) grandPrizeWinnersCount++;
+
+    return {
+      ...p,
+      leg1Correct,
+      leg2Correct,
+      leg3Correct,
+      legsCorrect,
+      grandPrizeWinner,
+      prizeCollected: p.prizeCollected || false
+    };
+  });
+
+  const updatedResult: MatchResult = {
+    homeGoals,
+    awayGoals,
+    playerGoals
+  };
+
+  match.status = "settled";
+  match.result = updatedResult;
+
+  // Persist to memory
+  const mIdx = memoryState.predictionMatches.findIndex(m => m.id === matchId);
+  if (mIdx >= 0) {
+    memoryState.predictionMatches[mIdx] = match;
+  }
+  settledPredictions.forEach(sp => {
+    const pIdx = memoryState.predictions.findIndex(p => p.matchId === matchId && p.uid === sp.uid);
+    if (pIdx >= 0) {
+      memoryState.predictions[pIdx] = sp;
+    } else {
+      memoryState.predictions.push(sp);
+    }
+  });
+
+  // Persist to Firestore
+  if (isFirestoreAvailable && db && COLLECTIONS) {
+    try {
+      const batch = db.batch();
+      batch.set(COLLECTIONS.predictionMatches.doc(matchId), { status: "settled", result: updatedResult }, { merge: true });
+      for (const sp of settledPredictions) {
+        const predRef = COLLECTIONS.predictions.doc(`${matchId}_${sp.uid}`);
+        batch.set(predRef, sp, { merge: true });
+      }
+      await batch.commit();
+    } catch (err) {
+      isFirestoreAvailable = false;
+      logFirestoreFallback("settlePredictionMatch commit", err);
+    }
+  }
+
+  const stats = {
+    totalEntries: settledPredictions.length,
+    leg1CorrectCount,
+    leg2CorrectCount,
+    leg3CorrectCount,
+    grandPrizeWinnersCount
+  };
+
+  return { success: true, match, stats };
+}
+
+export async function getMatchStats(matchId: string): Promise<{
+  totalEntries: number;
+  leg1CorrectCount: number;
+  leg2CorrectCount: number;
+  leg3CorrectCount: number;
+  grandPrizeWinnersCount: number;
+}> {
+  getAdminDb();
+  let predictions: Prediction[] = [];
+  if (isFirestoreAvailable && COLLECTIONS) {
+    try {
+      const snap = await COLLECTIONS.predictions.where("matchId", "==", matchId).get();
+      predictions = snap.docs.map(d => d.data() as Prediction);
+    } catch (err) {
+      predictions = memoryState.predictions.filter(p => p.matchId === matchId);
+    }
+  } else {
+    predictions = memoryState.predictions.filter(p => p.matchId === matchId);
+  }
+
+  return {
+    totalEntries: predictions.length,
+    leg1CorrectCount: predictions.filter(p => p.leg1Correct).length,
+    leg2CorrectCount: predictions.filter(p => p.leg2Correct).length,
+    leg3CorrectCount: predictions.filter(p => p.leg3Correct).length,
+    grandPrizeWinnersCount: predictions.filter(p => p.grandPrizeWinner).length
+  };
+}
+
+export async function getMatchWinners(matchId: string): Promise<Array<{ uid: string; displayName: string; prizeCollected: boolean }>> {
+  getAdminDb();
+  let predictions: Prediction[] = [];
+  if (isFirestoreAvailable && COLLECTIONS) {
+    try {
+      const snap = await COLLECTIONS.predictions.where("matchId", "==", matchId).where("grandPrizeWinner", "==", true).get();
+      predictions = snap.docs.map(d => d.data() as Prediction);
+    } catch (err) {
+      predictions = memoryState.predictions.filter(p => p.matchId === matchId && p.grandPrizeWinner);
+    }
+  } else {
+    predictions = memoryState.predictions.filter(p => p.matchId === matchId && p.grandPrizeWinner);
+  }
+
+  return predictions.map(p => ({
+    uid: p.uid,
+    displayName: formatWinnerName(p.displayName),
+    prizeCollected: Boolean(p.prizeCollected)
+  }));
+}
+
+export async function markPredictionPrizeCollected(matchId: string, uid: string, collected: boolean = true): Promise<{ success: boolean; error?: string }> {
+  getAdminDb();
+  const docId = `${matchId}_${uid}`;
+
+  const pIdx = memoryState.predictions.findIndex(p => p.matchId === matchId && p.uid === uid);
+  if (pIdx >= 0) {
+    memoryState.predictions[pIdx].prizeCollected = collected;
+  }
+
+  if (isFirestoreAvailable && COLLECTIONS) {
+    try {
+      await COLLECTIONS.predictions.doc(docId).set({ prizeCollected: collected }, { merge: true });
+    } catch (err) {
+      isFirestoreAvailable = false;
+      logFirestoreFallback("markPredictionPrizeCollected", err);
+    }
+  }
+
+  return { success: true };
 }
 
 // ==========================================
@@ -1483,7 +2027,7 @@ export async function getAppState(): Promise<AppState> {
     events,
     wallPosts,
     promotions,
-    rafflePrizes,
+    predictionMatches,
     registeredUsers,
     orders,
     shopStats
@@ -1492,7 +2036,7 @@ export async function getAppState(): Promise<AppState> {
     getEvents(),
     getWallPosts(),
     getPromotions(),
-    getRafflePrizes(),
+    getAllPredictionMatches(),
     getRegisteredUsers(),
     getOrders(),
     getShopStats()
@@ -1503,7 +2047,8 @@ export async function getAppState(): Promise<AppState> {
     events,
     wallPosts,
     promotions,
-    rafflePrizes,
+    predictionMatches,
+    predictions: memoryState.predictions,
     registeredUsers,
     orders,
     shopStats,

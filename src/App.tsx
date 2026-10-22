@@ -2,13 +2,12 @@ import React, { useState, useEffect } from "react";
 import { 
   Coffee, MapPin, Compass, Sparkles, Award, Users, ShieldAlert,
   Clock, Flame, RefreshCw, Star, Info, Bell, MessageSquare, Check, HelpCircle,
-  User, ShieldCheck, LogIn, LogOut, Key, ChevronDown, Menu, X
+  User, ShieldCheck, LogIn, LogOut, Key, ChevronDown, Menu, X, Trophy
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
-import DrinkBuilder from "./components/DrinkBuilder";
+import MatchDayPrize from "./components/MatchDayPrize";
 import EthiopianMap from "./components/EthiopianMap";
-import RaffleWheel from "./components/RaffleWheel";
 import BrewTimer from "./components/BrewTimer";
 import AromaExplorer from "./components/AromaExplorer";
 import CommunityWall from "./components/CommunityWall";
@@ -45,11 +44,12 @@ interface NavMenuItem {
 
 const ALL_MENU_CONFIG: NavMenuItem[] = [
   {
-    id: "builder",
-    icon: "☕",
-    label: "Cup Builder",
-    shortLabel: "Builder",
-    desc: "Custom Buna roasts, spices & brewing styles",
+    id: "prize",
+    icon: "⚽",
+    label: "Match Day Prize",
+    shortLabel: "Prize Game",
+    desc: "Weekly 3-leg prediction challenge & Buna rewards",
+    badge: "Matchday",
   },
   {
     id: "map",
@@ -57,13 +57,6 @@ const ALL_MENU_CONFIG: NavMenuItem[] = [
     label: "Interactive Origin Map",
     shortLabel: "Origin Map",
     desc: "Explore Ethiopian coffee terroirs & regions",
-  },
-  {
-    id: "raffle",
-    icon: "🎰",
-    label: "Lucky Raffle",
-    shortLabel: "Raffle",
-    desc: "Daily spins for beans, discounts & prizes",
   },
   {
     id: "sensory",
@@ -98,7 +91,7 @@ const ALL_MENU_CONFIG: NavMenuItem[] = [
 ];
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<string>("builder");
+  const [activeTab, setActiveTab] = useState<string>("prize");
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [loyalty, setLoyalty] = useState<LoyaltyProfile | null>(null);
   const [loading, setLoading] = useState(true);
@@ -285,7 +278,7 @@ export default function App() {
     localStorage.removeItem("buna_auth_user");
     localStorage.removeItem("buna_admin_token");
     if (activeTab === "owner") {
-      setActiveTab("builder");
+      setActiveTab("prize");
     }
     loadProfileAndPromos(guest);
     triggerToast("Signed out successfully. Now browsing as Guest.");
@@ -341,7 +334,7 @@ export default function App() {
         <div className="max-w-7xl mx-auto flex items-center justify-between gap-2 sm:gap-4">
           
           {/* Logo & Heritage Slogan */}
-          <BunaLogo onClick={() => setActiveTab("builder")} />
+          <BunaLogo onClick={() => setActiveTab("prize")} />
 
           {/* AUTHENTICATION CONTROLS & GOOGLE SIGN IN */}
           <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
@@ -589,12 +582,21 @@ export default function App() {
         )}
       </AnimatePresence>
 
-      {/* 4. REDESIGNED HERO SECTION (HERITAGE CRAFT & HIGH-FIDELITY LAYOUT - SHOWN ONLY ON HOME / CUP BUILDER PAGE) */}
-      {activeTab === "builder" && (
+      {/* 4. REDESIGNED HERO SECTION (COFFEE + SOCCER MATCH DAY EXPERIENCE) */}
+      {activeTab === "prize" && (
         <section className="relative overflow-hidden bg-gradient-to-b from-[#1a3e29] via-[#122b1c] to-[#122b1c] border-b border-[#295a3d] py-12 lg:py-16 px-4 md:px-8">
           
-          {/* Subtle Warm Spotlight Effects */}
+          {/* Subtle Pitch-line & Ball Geometric Seam SVG Motifs (CSS/SVG only - NO copyrighted crests/logos) */}
           <div className="absolute inset-0 pointer-events-none z-0 overflow-hidden">
+            {/* Center Circle & Halfway Line Motif */}
+            <div className="absolute -right-20 top-1/2 -translate-y-1/2 w-[540px] h-[540px] rounded-full border border-[#42bd6c]/10" />
+            <div className="absolute -right-20 top-1/2 -translate-y-1/2 w-[240px] h-[240px] rounded-full border border-[#42bd6c]/15" />
+            <div className="absolute top-0 right-[250px] w-px h-full bg-[#42bd6c]/10" />
+            
+            {/* Penalty Box Arc Motif */}
+            <div className="absolute -left-16 -top-16 w-64 h-64 rounded-full border border-[#2d824d]/20" />
+            
+            {/* Subtle Warm Spotlight Effects */}
             <div className="absolute -top-24 -left-24 w-[500px] h-[500px] rounded-full bg-[#2d824d]/20 blur-[120px]" />
             <div className="absolute top-1/2 -right-32 w-[600px] h-[600px] rounded-full bg-[#42bd6c]/10 blur-[140px]" />
           </div>
@@ -607,11 +609,12 @@ export default function App() {
               {/* LEFT COLUMN: HERO TYPOGRAPHY & BRANDING */}
               <div className="lg:col-span-7 flex flex-col items-center lg:items-start text-center lg:text-left">
                 
-                {/* Heritage Badge */}
+                {/* Heritage & Football Badge */}
                 <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-[#224e38] border border-[#2d824d]/40 shadow-sm mb-6">
                   <span className="text-sm">🇪🇹</span>
+                  <span className="text-xs">⚽</span>
                   <span className="text-[11px] font-mono text-[#42bd6c] uppercase tracking-widest font-semibold">
-                    Celebrating 1,000+ Years of Coffee Culture
+                    The Ritual of Buna & Match Day
                   </span>
                 </div>
 
@@ -621,26 +624,26 @@ export default function App() {
                 </h1>
                 
                 <h2 className="text-2xl sm:text-3xl lg:text-4xl font-serif-display italic font-medium text-[#42bd6c] mb-6 tracking-wide">
-                  Discover Your Perfect Origin
+                  Where Specialty Coffee Meets the Pitch
                 </h2>
 
                 <p className="text-sm sm:text-base text-stone-300 leading-relaxed font-sans font-light tracking-wide max-w-2xl mb-8">
-                  Buna is an interactive sensory experience platform. Travel across historical Ethiopian coffee terroirs, master the traditional ceremony, customize your cup with real-time health analytics, and collect digital stamps as you explore.
+                  From traditional clay Jebena roasts in Addis Ababa to the roaring drama of weekend football. Sip single-origin Ethiopian coffees, stamp your origin passport across Sidama and Yirgacheffe, and enter the free weekly 3-leg prediction challenge to win artisanal beans.
                 </p>
 
                 {/* Primary Action Buttons */}
                 <div className="flex flex-wrap items-center justify-center lg:justify-start gap-4">
                   <button
-                    onClick={() => handleTabClick("builder")}
-                    className="px-6 py-3.5 rounded-2xl bg-gradient-to-r from-[#2d824d] via-[#42bd6c] to-[#2d824d] hover:from-[#226a3f] hover:to-[#226a3f] text-white font-bold text-sm transition-all shadow-lg shadow-[#2d824d]/30 hover:scale-[1.02] active:scale-[0.98] flex items-center gap-2.5"
+                    onClick={() => handleTabClick("prize")}
+                    className="px-6 py-3.5 rounded-2xl bg-gradient-to-r from-[#2d824d] via-[#42bd6c] to-[#2d824d] hover:from-[#226a3f] hover:to-[#226a3f] text-white font-bold text-sm transition-all shadow-lg shadow-[#2d824d]/30 hover:scale-[1.02] active:scale-[0.98] flex items-center gap-2.5 cursor-pointer"
                   >
-                    <Coffee size={18} />
-                    <span>Start Customizing Cup</span>
+                    <Trophy size={18} />
+                    <span>Predict & Win Grand Prize</span>
                   </button>
 
                   <button
                     onClick={() => handleTabClick("map")}
-                    className="px-6 py-3.5 rounded-2xl bg-[#224e38] hover:bg-[#295a3d] border border-[#295a3d] text-white font-semibold text-sm transition-all flex items-center gap-2 shadow-sm"
+                    className="px-6 py-3.5 rounded-2xl bg-[#224e38] hover:bg-[#295a3d] border border-[#295a3d] text-white font-semibold text-sm transition-all flex items-center gap-2 shadow-sm cursor-pointer"
                   >
                     <span>🗺</span>
                     <span>Explore Terroir Map</span>
@@ -649,9 +652,9 @@ export default function App() {
 
               </div>
 
-              {/* RIGHT COLUMN: HIGH-FIDELITY COFFEE CUP GRAPHIC (NO TEXT BLEED) */}
+              {/* RIGHT COLUMN: HIGH-FIDELITY COFFEE CUP GRAPHIC WITH PITCH-LINE SEAMS */}
               <div className="lg:col-span-5 relative flex items-center justify-center pt-6 lg:pt-0">
-                {/* Ken Burns-style Slow Zoom/Pan Atmospheric Background Layer */}
+                {/* Slow Zoom Atmospheric Background Layer */}
                 <motion.div
                   initial={{ scale: 1, rotate: 0 }}
                   animate={{ scale: [1, 1.15, 1.05, 1], rotate: [0, 3, -3, 0], x: [0, 8, -8, 0] }}
@@ -659,7 +662,7 @@ export default function App() {
                   className="absolute inset-0 bg-gradient-to-tr from-[#2d824d]/30 via-emerald-800/20 to-transparent blur-3xl rounded-full scale-95 pointer-events-none"
                 />
                 
-                {/* Cup Graphic Container */}
+                {/* Coffee Cup Container with Subtle Ball Geometry Overlay */}
                 <div className="relative w-full max-w-[380px] sm:max-w-[440px] aspect-square flex items-center justify-center">
                   <CoffeeCupSVG />
                 </div>
@@ -757,21 +760,21 @@ export default function App() {
       <main className="max-w-7xl mx-auto px-4 py-8">
         <AnimatePresence mode="wait">
           
-          {/* TAB: DRINK BUILDER */}
-          {activeTab === "builder" && (
+          {/* TAB: MATCH DAY PREDICTION PRIZE */}
+          {activeTab === "prize" && (
             <motion.div
-              key="builder"
+              key="prize"
               initial={{ opacity: 0, y: 15 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -15 }}
               transition={{ duration: 0.3 }}
               className="flex flex-col gap-8"
             >
-              <div className="flex flex-col gap-1.5 max-w-3xl">
-                <h3 className="text-2xl font-bold font-display text-white">Build Your Dream Coffee</h3>
-                <p className="text-xs text-stone-400">Design your perfect coffee combination with local Ethiopian cardamoms, milks, and toppings. Calories, caffeine, and price update dynamically in real time.</p>
-              </div>
-              <DrinkBuilder onOrderSuccess={handleDrinkOrdered} />
+              <MatchDayPrize
+                authUser={authUser}
+                onOpenLogin={() => setIsLoginModalOpen(true)}
+                onRewardPoints={handleRewardPoints}
+              />
             </motion.div>
           )}
 
@@ -791,34 +794,6 @@ export default function App() {
                 <p className="text-xs text-stone-400">Click on historical microclimates and estates to explore elevation parameters, tasting notes, and farmer heritage. Stamp your passport by sampling their beans!</p>
               </div>
               <EthiopianMap onStampPassport={handleStampPassport} stampedRegions={loyalty?.passportStamps || []} />
-            </motion.div>
-          )}
-
-          {/* TAB: LUCKY RAFFLE WHEEL */}
-          {activeTab === "raffle" && loyalty && (
-            <motion.div
-              key="raffle"
-              initial={{ opacity: 0, y: 15 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -15 }}
-              transition={{ duration: 0.3 }}
-              className="flex flex-col gap-8"
-            >
-              <RaffleWheel 
-                loyalty={loyalty} 
-                authUser={authUser}
-                onOpenLogin={() => {
-                  setIsLoginModalOpen(true);
-                }}
-                onSignupSuccess={(updatedLoyalty) => {
-                  setLoyalty(updatedLoyalty);
-                  triggerToast("🎉 Account Created! Welcome raffle unlocked for your account!");
-                }}
-                onSpinSuccess={(updatedLoyalty, prize) => {
-                  setLoyalty(updatedLoyalty);
-                  triggerToast(`🎯 Spin Complete! Congratulations, you won a Free: ${prize}!`);
-                }}
-              />
             </motion.div>
           )}
 
@@ -893,16 +868,21 @@ export default function App() {
         </AnimatePresence>
       </main>
 
-      {/* 6. IMMERSIVE CULTURAL FOOTER */}
+      {/* 6. IMMERSIVE CULTURAL & MATCH DAY FOOTER */}
       <footer className="bg-[#0e2217] border-t border-[#295a3d] py-12 px-4 text-center mt-12 text-xs text-stone-300">
         <div className="max-w-3xl mx-auto flex flex-col items-center gap-4">
-          <BunaLogo size="md" onClick={() => setActiveTab("builder")} />
+          <BunaLogo size="md" onClick={() => setActiveTab("prize")} />
           <p className="font-sans italic text-[#42bd6c] font-light tracking-wide mt-1">"Buna dabo naw" — Coffee is our bread.</p>
           <p className="max-w-md mx-auto leading-relaxed text-stone-300">
-            Buna celebrates the ancient coffee heritage of Ethiopia. Inspired by the highlands of Kaffa, Sidamo, and Yirgacheffe.
+            Buna celebrates the ancient coffee heritage of Ethiopia alongside weekend matchday culture. Inspired by the highlands of Kaffa, Sidamo, and Yirgacheffe.
+          </p>
+          <p className="text-[11px] text-stone-400 font-mono">
+            Buna is not affiliated with the Premier League or any football club.
           </p>
           <div className="flex justify-center gap-4 text-[10px] font-mono uppercase tracking-widest mt-2 text-[#42bd6c]">
-            <span>Loyalty Version 2.5</span>
+            <span>Coffee & Soccer Edition</span>
+            <span>•</span>
+            <span>Loyalty Version 3.0</span>
             <span>•</span>
             <span>All Rights Reserved</span>
           </div>

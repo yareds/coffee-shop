@@ -6,11 +6,13 @@ import {
   addPromotion,
   editPromotion,
   deletePromotion,
-  getRafflePrizes,
-  addRafflePrize,
-  editRafflePrize,
-  toggleRafflePrize,
-  deleteRafflePrize,
+  getAllPredictionMatches,
+  savePredictionMatch,
+  voidPredictionMatch,
+  settlePredictionMatch,
+  getMatchStats,
+  getMatchWinners,
+  markPredictionPrizeCollected,
   getRegisteredUsers,
   resetUserSpin,
   deleteRegisteredUser,
@@ -163,36 +165,133 @@ router.post("/promotions", adminAuthMiddleware, async (req, res) => {
   }
 });
 
-// 4. Manage Raffle Prizes
-router.post("/raffle", adminAuthMiddleware, async (req, res) => {
+// 4. Manage Weekly Match Predictions (Protected)
+router.get("/predictions/matches", adminAuthMiddleware, async (req, res) => {
   try {
-    const { action, prize, prizeId } = req.body;
-    let prizes;
+    const matches = await getAllPredictionMatches();
+    const enriched = await Promise.all(
+      matches.map(async (m) => {
+        const stats = await getMatchStats(m.id);
+        const winners = m.status === "settled" ? await getMatchWinners(m.id) : [];
+        return {
+          ...m,
+          stats,
+          winners
+        };
+      })
+    );
+    res.json({ success: true, matches: enriched });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || "Failed to fetch prediction matches" });
+  }
+});
 
-    if (action === "add") {
-      prizes = await addRafflePrize({
-        name: prize.name,
-        desc: prize.desc,
-        active: true,
-        color: prize.color
-      });
-    } else if (action === "edit") {
-      prizes = await editRafflePrize(prizeId, {
-        name: prize.name,
-        desc: prize.desc,
-        color: prize.color
-      });
-    } else if (action === "toggle") {
-      prizes = await toggleRafflePrize(prizeId);
-    } else if (action === "delete") {
-      prizes = await deleteRafflePrize(prizeId);
-    } else {
-      prizes = await getRafflePrizes();
+router.post("/predictions/matches", adminAuthMiddleware, async (req, res) => {
+  try {
+    const { id, homeTeam, awayTeam, competition, kickoffAt, prizeDescription, players } = req.body;
+    if (!homeTeam || !awayTeam || !kickoffAt) {
+      return res.status(400).json({ error: "homeTeam, awayTeam, and kickoffAt are required." });
     }
 
-    res.json({ success: true, prizes, rafflePrizes: prizes });
+    if (!Array.isArray(players) || players.length === 0) {
+      return res.status(400).json({ error: "A list of players is required for users to pick from." });
+    }
+
+    const result = await savePredictionMatch({
+      id,
+      homeTeam,
+      awayTeam,
+      competition,
+      kickoffAt,
+      prizeDescription,
+      players
+    });
+
+    if (!result.success) {
+      return res.status(400).json({ error: result.error });
+    }
+
+    res.json({
+      success: true,
+      match: result.match,
+      warning: result.warning,
+      message: result.warning ? `Match saved (${result.warning})` : "Match saved successfully."
+    });
   } catch (err: any) {
-    res.status(500).json({ error: err.message || "Failed to update raffle prizes" });
+    res.status(500).json({ error: err.message || "Failed to save match" });
+  }
+});
+
+router.post("/predictions/void", adminAuthMiddleware, async (req, res) => {
+  try {
+    const { matchId } = req.body;
+    if (!matchId) {
+      return res.status(400).json({ error: "matchId is required" });
+    }
+    const result = await voidPredictionMatch(matchId);
+    if (!result.success) {
+      return res.status(400).json({ error: result.error });
+    }
+    res.json({ success: true, match: result.match, message: "Match marked as void." });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || "Failed to void match" });
+  }
+});
+
+router.post("/predictions/settle", adminAuthMiddleware, async (req, res) => {
+  try {
+    const { matchId, homeGoals, awayGoals, playerGoals } = req.body;
+    if (!matchId) {
+      return res.status(400).json({ error: "matchId is required" });
+    }
+
+    const hGoals = Number(homeGoals);
+    const aGoals = Number(awayGoals);
+    if (isNaN(hGoals) || isNaN(aGoals) || hGoals < 0 || aGoals < 0) {
+      return res.status(400).json({ error: "homeGoals and awayGoals must be non-negative integers." });
+    }
+
+    const result = await settlePredictionMatch(
+      matchId,
+      Math.floor(hGoals),
+      Math.floor(aGoals),
+      playerGoals || {}
+    );
+
+    if (!result.success) {
+      return res.status(400).json({ error: result.error });
+    }
+
+    const winners = await getMatchWinners(matchId);
+    res.json({
+      success: true,
+      match: result.match,
+      stats: result.stats,
+      winners,
+      message: `Match settled successfully. ${result.stats?.grandPrizeWinnersCount || 0} grand prize winner(s) identified!`
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || "Failed to settle match" });
+  }
+});
+
+router.post("/predictions/collect-prize", adminAuthMiddleware, async (req, res) => {
+  try {
+    const { matchId, uid, collected } = req.body;
+    if (!matchId || !uid) {
+      return res.status(400).json({ error: "matchId and uid are required." });
+    }
+
+    const isCollected = collected !== undefined ? Boolean(collected) : true;
+    const result = await markPredictionPrizeCollected(matchId, uid, isCollected);
+    if (!result.success) {
+      return res.status(400).json({ error: result.error });
+    }
+
+    const winners = await getMatchWinners(matchId);
+    res.json({ success: true, winners, message: `Prize status updated for user.` });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || "Failed to mark prize collected" });
   }
 });
 
