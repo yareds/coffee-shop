@@ -1,12 +1,12 @@
 {
+  "projectId": "buna-ethiopia",
+  "appId": "1:419623606773:web:25d6c871202a2d090ce8bc",
   "apiKey": "AIzaSyDKn0ygyp3VvHXkHB9G47Xc-1lsedBdGc0",
   "authDomain": "buna-ethiopia.firebaseapp.com",
-  "projectId": "buna-ethiopia",
-  "firestoreDatabaseId": "(default)",
+  "firestoreDatabaseId": "ai-studio-bunaaipremiumcof-4a662efd-cc62-4ab6-a8ad-cd1f24a9e707",
   "storageBucket": "buna-ethiopia.firebasestorage.app",
   "messagingSenderId": "419623606773",
-  "appId": "1:419623606773:web:091915653f6360a90ce8bc",
-  "measurementId": "G-GCWPE60GT5",
-   "oAuthClientId": "",
+  "measurementId": "",
+  "oAuthClientId": "419623606773-usp9qgeerp7053vi7ea40f240c0jaim1.apps.googleusercontent.com",
   "recaptchaSiteKey": ""
 }

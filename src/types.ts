@@ -73,6 +73,7 @@ export interface LoyaltyProfile {
 }
 
 export interface AuthUser {
+  uid?: string;
   role: 'guest' | 'user' | 'admin';
   name: string;
   email?: string;
@@ -140,6 +141,7 @@ export interface Prediction {
   matchId: string;
   uid: string;
   displayName: string;
+  email?: string;
   outcome: "HOME" | "AWAY" | "DRAW";
   scoreline: string; // strictly "Home:Away"
   playerName: string;
@@ -153,6 +155,7 @@ export interface Prediction {
   grandPrizeWinner?: boolean;
   prizeCollected?: boolean;
   prizeCollectedAt?: string;
+  collectedAt?: string;
   collectedBy?: string;
   claimCode?: string;
 }

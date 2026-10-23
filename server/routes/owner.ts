@@ -14,6 +14,8 @@ import {
   correctPredictionMatchResult,
   getMatchStats,
   getMatchWinners,
+  getAdminMatchWinners,
+  getMatchEntries,
   markPredictionPrizeCollected,
   verifyPredictionClaim,
   redeemPredictionPrize,
@@ -23,7 +25,8 @@ import {
   deleteRegisteredUser,
   getOrders,
   updateOrderStatus,
-  getProfile
+  getProfile,
+  getAdminAuth
 } from "../db.js";
 import { adminAuthMiddleware, createAdminToken, verifyAdminPin } from "../middleware.js";
 
@@ -33,23 +36,25 @@ const router = Router();
 router.post("/verify-pin", (req, res) => {
   const pin = (req.body?.adminPin || req.body?.pin || "").toString().trim();
 
-  // Fail closed: reject all attempts if ADMIN_PIN is not configured
-  if (!process.env.ADMIN_PIN || !process.env.ADMIN_PIN.trim()) {
-    return res.status(401).json({
-      error: "Admin PIN authentication is not configured on the server."
-    });
-  }
-
   if (pin && verifyAdminPin(pin)) {
-    const token = createAdminToken();
+    let token: string;
+    try {
+      token = createAdminToken();
+    } catch (err: any) {
+      return res.status(401).json({
+        error: err.message || "Failed to create admin session token."
+      });
+    }
+
+    const adminEmail = (process.env.ADMIN_EMAIL || "").trim();
     return res.json({
       success: true,
       token,
       message: "Admin authentication successful.",
       adminUser: {
         role: "admin",
-        name: "yared.abegaz@gmail.com",
-        email: "yared.abegaz@gmail.com"
+        name: adminEmail || "Admin",
+        email: adminEmail || "admin"
       }
     });
   }
@@ -60,16 +65,62 @@ router.post("/verify-pin", (req, res) => {
 });
 
 // Admin Google Auth endpoint
-router.post("/google-auth", (req, res) => {
-  const email = (req.body?.email || "").toString().toLowerCase().trim();
-  const adminEmails = [
-    (process.env.ADMIN_EMAIL || "yared.abegaz@gmail.com").toLowerCase().trim(),
-    "yared.abegaz@gmail.com"
-  ];
+// Verifies Firebase ID token cryptographically, requires verified email matching ADMIN_EMAIL (fail closed if unset)
+router.post("/google-auth", async (req, res) => {
+  // Fail closed: reject if ADMIN_EMAIL is unset or empty
+  const configuredAdminEmail = (process.env.ADMIN_EMAIL || "").toLowerCase().trim();
+  if (!configuredAdminEmail) {
+    return res.status(401).json({
+      error: "Admin authentication is not configured on the server (ADMIN_EMAIL unset)."
+    });
+  }
 
-  const isAdmin = adminEmails.includes(email);
+  // Require Authorization: Bearer <Firebase ID token>
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    return res.status(401).json({
+      error: "Unauthorized: Missing Authorization Bearer token."
+    });
+  }
+
+  const idToken = authHeader.substring(7).trim();
+  if (!idToken) {
+    return res.status(401).json({
+      error: "Unauthorized: Empty Bearer token."
+    });
+  }
+
+  const auth = getAdminAuth();
+  if (!auth) {
+    return res.status(401).json({
+      error: "Authentication service is unavailable."
+    });
+  }
+
+  let decoded;
+  try {
+    decoded = await auth.verifyIdToken(idToken);
+  } catch (err: any) {
+    return res.status(401).json({
+      error: "Invalid or expired Firebase ID token."
+    });
+  }
+
+  // Require decoded.email_verified === true and decoded.email.toLowerCase() equal to ADMIN_EMAIL
+  const isEmailVerified = decoded.email_verified === true;
+  const userEmail = (decoded.email || "").toLowerCase().trim();
+  const isAdmin = isEmailVerified && userEmail === configuredAdminEmail;
+
   if (isAdmin) {
-    const token = createAdminToken();
+    let token: string;
+    try {
+      token = createAdminToken();
+    } catch (err: any) {
+      return res.status(401).json({
+        error: err.message || "Failed to create admin session token."
+      });
+    }
+
     return res.json({
       success: true,
       isAdmin: true,
@@ -77,21 +128,15 @@ router.post("/google-auth", (req, res) => {
       message: "Admin authenticated via Google Sign In.",
       user: {
         role: "admin",
-        name: "yared.abegaz@gmail.com",
-        email: "yared.abegaz@gmail.com"
+        name: decoded.name || decoded.email || configuredAdminEmail,
+        email: decoded.email || configuredAdminEmail
       }
     });
   }
 
   return res.json({
     success: true,
-    isAdmin: false,
-    message: "User authenticated via Google Sign In.",
-    user: {
-      role: "user",
-      name: req.body?.name || email.split("@")[0] || "Coffee Explorer",
-      email
-    }
+    isAdmin: false
   });
 });
 
@@ -170,6 +215,13 @@ router.post("/promotions", adminAuthMiddleware, async (req, res) => {
   }
 });
 
+function getSafeErrorMessage(err: any, fallbackMessage: string): string {
+  if (process.env.NODE_ENV === "production") {
+    return "Internal server error";
+  }
+  return err?.message || fallbackMessage;
+}
+
 // 4. Manage Weekly Match Predictions (Protected)
 router.get("/predictions/matches", adminAuthMiddleware, async (req, res) => {
   try {
@@ -177,7 +229,7 @@ router.get("/predictions/matches", adminAuthMiddleware, async (req, res) => {
     const enriched = await Promise.all(
       matches.map(async (m) => {
         const stats = await getMatchStats(m.id);
-        const winners = m.status === "settled" ? await getMatchWinners(m.id) : [];
+        const winners = m.status === "settled" ? await getAdminMatchWinners(m.id) : [];
         return {
           ...m,
           stats,
@@ -187,7 +239,7 @@ router.get("/predictions/matches", adminAuthMiddleware, async (req, res) => {
     );
     res.json({ success: true, matches: enriched });
   } catch (err: any) {
-    res.status(500).json({ error: err.message || "Failed to fetch prediction matches" });
+    res.status(500).json({ error: getSafeErrorMessage(err, "Failed to fetch prediction matches") });
   }
 });
 
@@ -213,7 +265,7 @@ router.post("/predictions/matches", adminAuthMiddleware, async (req, res) => {
     });
 
     if (!result.success) {
-      return res.status(400).json({ error: result.error });
+      return res.status(result.status || 400).json({ error: result.error });
     }
 
     res.json({
@@ -223,7 +275,7 @@ router.post("/predictions/matches", adminAuthMiddleware, async (req, res) => {
       message: result.warning ? `Match saved (${result.warning})` : "Match saved successfully."
     });
   } catch (err: any) {
-    res.status(500).json({ error: err.message || "Failed to save match" });
+    res.status(500).json({ error: getSafeErrorMessage(err, "Failed to save match") });
   }
 });
 
@@ -235,17 +287,17 @@ router.post("/predictions/void", adminAuthMiddleware, async (req, res) => {
     }
     const result = await voidPredictionMatch(matchId);
     if (!result.success) {
-      return res.status(400).json({ error: result.error });
+      return res.status(result.status || 400).json({ error: result.error });
     }
     res.json({ success: true, match: result.match, message: "Match marked as void." });
   } catch (err: any) {
-    res.status(500).json({ error: err.message || "Failed to void match" });
+    res.status(500).json({ error: getSafeErrorMessage(err, "Failed to void match") });
   }
 });
 
 router.post("/predictions/settle", adminAuthMiddleware, async (req, res) => {
   try {
-    const { matchId, homeGoals, awayGoals, playerGoals } = req.body;
+    const { matchId, homeGoals, awayGoals, playerGoals, correction } = req.body;
     if (!matchId) {
       return res.status(400).json({ error: "matchId is required" });
     }
@@ -260,14 +312,15 @@ router.post("/predictions/settle", adminAuthMiddleware, async (req, res) => {
       matchId,
       Math.floor(hGoals),
       Math.floor(aGoals),
-      playerGoals || {}
+      playerGoals || {},
+      { correction: Boolean(correction) }
     );
 
     if (!result.success) {
-      return res.status(400).json({ error: result.error });
+      return res.status(result.status || 400).json({ error: result.error });
     }
 
-    const winners = await getMatchWinners(matchId);
+    const winners = await getAdminMatchWinners(matchId);
     res.json({
       success: true,
       match: result.match,
@@ -276,7 +329,7 @@ router.post("/predictions/settle", adminAuthMiddleware, async (req, res) => {
       message: `Match settled successfully. ${result.stats?.grandPrizeWinnersCount || 0} grand prize winner(s) identified!`
     });
   } catch (err: any) {
-    res.status(500).json({ error: err.message || "Failed to settle match" });
+    res.status(500).json({ error: getSafeErrorMessage(err, "Failed to settle match") });
   }
 });
 
@@ -288,16 +341,33 @@ router.post("/predictions/collect-prize", adminAuthMiddleware, async (req, res) 
     }
 
     const isCollected = collected !== undefined ? Boolean(collected) : true;
-    const adminEmail = (req.headers["x-admin-email"] as string) || "yared.abegaz@gmail.com";
+    const adminEmail = (req.headers["x-admin-email"] as string) || (process.env.ADMIN_EMAIL || "").trim() || "admin";
     const result = await markPredictionPrizeCollected(matchId, uid, isCollected, adminEmail);
     if (!result.success) {
-      return res.status(400).json({ error: result.error });
+      return res.status(result.status || 400).json({ error: result.error });
     }
 
-    const winners = await getMatchWinners(matchId);
+    const winners = await getAdminMatchWinners(matchId);
     res.json({ success: true, winners, message: `Prize status updated for user.` });
   } catch (err: any) {
-    res.status(500).json({ error: err.message || "Failed to mark prize collected" });
+    res.status(500).json({ error: getSafeErrorMessage(err, "Failed to mark prize collected") });
+  }
+});
+
+// Admin Entrants List for a Specific Match
+// Returns every prediction for the match: displayName (full), email, outcome, scoreline,
+// playerName, playerGoals, submittedAt, updatedAt, and after settlement: leg1/2/3Correct,
+// legsCorrect, grandPrizeWinner, prizeCollected, collectedAt, claimCode.
+router.get("/predictions/entries", adminAuthMiddleware, async (req, res) => {
+  try {
+    const matchId = (req.query.matchId as string || "").trim();
+    if (!matchId) {
+      return res.status(400).json({ error: "matchId is required" });
+    }
+    const entries = await getMatchEntries(matchId);
+    res.json({ success: true, matchId, entries });
+  } catch (err: any) {
+    res.status(500).json({ error: getSafeErrorMessage(err, "Failed to fetch match entries") });
   }
 });
 
@@ -314,7 +384,7 @@ router.get("/predictions/all", adminAuthMiddleware, async (req, res) => {
     });
     res.json({ success: true, predictions });
   } catch (err: any) {
-    res.status(500).json({ error: err.message || "Failed to fetch predictions" });
+    res.status(500).json({ error: getSafeErrorMessage(err, "Failed to fetch predictions") });
   }
 });
 
@@ -327,11 +397,11 @@ router.post("/predictions/verify-claim", adminAuthMiddleware, async (req, res) =
     }
     const result = await verifyPredictionClaim(claimCode);
     if (!result.success) {
-      return res.status(404).json({ error: result.error });
+      return res.status(result.status || 404).json({ error: result.error });
     }
     res.json({ success: true, ...result });
   } catch (err: any) {
-    res.status(500).json({ error: err.message || "Failed to verify claim code" });
+    res.status(500).json({ error: getSafeErrorMessage(err, "Failed to verify claim code") });
   }
 });
 
@@ -342,14 +412,14 @@ router.post("/predictions/redeem-prize", adminAuthMiddleware, async (req, res) =
     if (!claimCode) {
       return res.status(400).json({ error: "Claim code is required." });
     }
-    const adminEmail = (req.headers["x-admin-email"] as string) || "yared.abegaz@gmail.com";
+    const adminEmail = (req.headers["x-admin-email"] as string) || (process.env.ADMIN_EMAIL || "").trim() || "admin";
     const result = await redeemPredictionPrize(claimCode, adminEmail);
     if (!result.success) {
-      return res.status(400).json({ error: result.error });
+      return res.status(result.status || 400).json({ error: result.error });
     }
     res.json({ success: true, prediction: result.prediction, message: "Prize successfully marked as redeemed." });
   } catch (err: any) {
-    res.status(500).json({ error: err.message || "Failed to redeem prize" });
+    res.status(500).json({ error: getSafeErrorMessage(err, "Failed to redeem prize") });
   }
 });
 
@@ -365,7 +435,7 @@ router.post("/predictions/correct-result", adminAuthMiddleware, async (req, res)
     if (isNaN(hGoals) || isNaN(aGoals) || hGoals < 0 || aGoals < 0) {
       return res.status(400).json({ error: "homeGoals and awayGoals must be non-negative integers." });
     }
-    const adminEmail = (req.headers["x-admin-email"] as string) || "yared.abegaz@gmail.com";
+    const adminEmail = (req.headers["x-admin-email"] as string) || (process.env.ADMIN_EMAIL || "").trim() || "admin";
     const result = await correctPredictionMatchResult(
       matchId,
       Math.floor(hGoals),
@@ -375,7 +445,7 @@ router.post("/predictions/correct-result", adminAuthMiddleware, async (req, res)
       adminEmail
     );
     if (!result.success) {
-      return res.status(400).json({ error: result.error });
+      return res.status(result.status || 400).json({ error: result.error });
     }
     const winners = await getMatchWinners(matchId);
     res.json({
@@ -386,7 +456,7 @@ router.post("/predictions/correct-result", adminAuthMiddleware, async (req, res)
       message: "Match result corrected and audited successfully. Predictions re-evaluated."
     });
   } catch (err: any) {
-    res.status(500).json({ error: err.message || "Failed to correct match result" });
+    res.status(500).json({ error: getSafeErrorMessage(err, "Failed to correct match result") });
   }
 });
 

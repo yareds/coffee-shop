@@ -114,6 +114,64 @@ export default function MatchDayPrize({ authUser, onOpenLogin }: MatchDayPrizePr
     }
   };
 
+  // Load details for the current featured match
+  const loadFeaturedMatch = async () => {
+    try {
+      setLoading(true);
+      const headers: Record<string, string> = {};
+      if (auth.currentUser) {
+        try {
+          const token = await auth.currentUser.getIdToken();
+          if (token) headers["Authorization"] = `Bearer ${token}`;
+        } catch (e) {
+          // ignore
+        }
+      }
+
+      const res = await fetch("/api/predictions/featured", { headers });
+      const data = await res.json();
+
+      if (data.match) {
+        setMatch(data.match);
+        setSelectedMatchId(data.match.id);
+        setTotalEntries(data.totalEntries || 0);
+        setStats(data.stats || null);
+        setWinners(data.winners || []);
+
+        if (data.serverNow) {
+          const serverMs = new Date(data.serverNow).getTime();
+          setServerTimeOffset(serverMs - Date.now());
+        }
+
+        if (data.userPrediction) {
+          setUserPrediction(data.userPrediction);
+          setOutcome(data.userPrediction.outcome);
+          const parts = (data.userPrediction.scoreline || "2:1").split(":");
+          setHomeGoals(parseInt(parts[0], 10) || 0);
+          setAwayGoals(parseInt(parts[1], 10) || 0);
+          setSelectedPlayer(data.userPrediction.playerName || "");
+          setPlayerGoals(data.userPrediction.playerGoals ?? 1);
+        } else {
+          // Clear userPrediction and form fields when server returns none
+          setUserPrediction(null);
+          setOutcome("HOME");
+          setHomeGoals(2);
+          setAwayGoals(1);
+          if (data.match.players && data.match.players.length > 0) {
+            setSelectedPlayer(data.match.players[0].name);
+          }
+          setPlayerGoals(1);
+        }
+      } else {
+        setUserPrediction(null);
+      }
+    } catch (err) {
+      console.error("Error loading featured match:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Load details for a specific match
   const loadMatchDetails = async (mId: string) => {
     try {
@@ -150,6 +208,7 @@ export default function MatchDayPrize({ authUser, onOpenLogin }: MatchDayPrizePr
           setSelectedPlayer(data.userPrediction.playerName || "");
           setPlayerGoals(data.userPrediction.playerGoals ?? 1);
         } else {
+          // Clear userPrediction and form fields when server returns none
           setUserPrediction(null);
           setOutcome("HOME");
           setHomeGoals(2);
@@ -159,13 +218,15 @@ export default function MatchDayPrize({ authUser, onOpenLogin }: MatchDayPrizePr
           }
           setPlayerGoals(1);
         }
+      } else {
+        setUserPrediction(null);
       }
     } catch (err) {
       console.error("Error loading match details:", err);
     }
   };
 
-  // Load user's prediction history across all matches
+  // Load user's prediction history across all matches (joined with match details)
   const loadMyPredictions = async () => {
     if (!auth.currentUser) {
       setMyPredictions([]);
@@ -174,7 +235,7 @@ export default function MatchDayPrize({ authUser, onOpenLogin }: MatchDayPrizePr
     try {
       setLoadingMyPreds(true);
       const token = await auth.currentUser.getIdToken();
-      const res = await fetch("/api/predictions/my-predictions", {
+      const res = await fetch("/api/predictions/mine", {
         headers: { "Authorization": `Bearer ${token}` }
       });
       const data = await res.json();
@@ -188,15 +249,28 @@ export default function MatchDayPrize({ authUser, onOpenLogin }: MatchDayPrizePr
     }
   };
 
+  // Reset all prediction state whenever signed-in uid changes or on sign-out
   useEffect(() => {
+    setUserPrediction(null);
+    setMyPredictions([]);
+    setOutcome("HOME");
+    setHomeGoals(2);
+    setAwayGoals(1);
+    setSelectedPlayer("");
+    setPlayerGoals(1);
+    setSubmitMsg(null);
+
     loadMatches();
-  }, [authUser?.email, authUser?.role]);
+    if (authUser?.uid) {
+      loadMyPredictions();
+    }
+  }, [authUser?.uid]);
 
   useEffect(() => {
     if (activeTab === "my_predictions") {
       loadMyPredictions();
     }
-  }, [activeTab, authUser?.email]);
+  }, [activeTab, authUser?.uid]);
 
   const handleSelectMatch = (mId: string) => {
     setSelectedMatchId(mId);
@@ -641,27 +715,61 @@ export default function MatchDayPrize({ authUser, onOpenLogin }: MatchDayPrizePr
                   </div>
 
                   {userPrediction.grandPrizeWinner && (
-                    <div className="p-4 rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 text-stone-950 font-bold text-xs mb-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-lg">
-                      <div className="flex items-center gap-2.5">
-                        <Trophy size={22} className="shrink-0" />
-                        <div>
-                          <span className="font-black text-sm block">🎉 CONGRATULATIONS! You Won the Grand Prize!</span>
-                          <span className="text-xs font-medium text-stone-900">{match.prizeDescription}</span>
+                    <div className={`p-4 rounded-xl mb-4 border shadow-lg ${
+                      userPrediction.prizeCollected
+                        ? "bg-emerald-950/40 border-emerald-500/50 text-white"
+                        : "bg-gradient-to-r from-amber-400 to-amber-500 text-stone-950 border-amber-300"
+                    }`}>
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
+                        <div className="flex items-center gap-2.5">
+                          <Trophy size={22} className={userPrediction.prizeCollected ? "text-emerald-400 shrink-0" : "text-stone-950 shrink-0"} />
+                          <div>
+                            <span className={`font-black text-sm block ${userPrediction.prizeCollected ? "text-white" : "text-stone-950"}`}>
+                              {userPrediction.prizeCollected
+                                ? `Prize collected on ${new Date(userPrediction.collectedAt || userPrediction.prizeCollectedAt || "").toLocaleDateString()}`
+                                : "You won! Show this screen to the shop owner to collect your prize"}
+                            </span>
+                            <span className={`text-xs block ${userPrediction.prizeCollected ? "text-stone-300" : "text-stone-900 font-medium"}`}>
+                              {match.prizeDescription}
+                            </span>
+                          </div>
                         </div>
+
+                        {userPrediction.claimCode && (
+                          <div className={`px-3 py-1.5 rounded-lg font-mono text-xs flex items-center gap-2 self-start sm:self-auto ${
+                            userPrediction.prizeCollected
+                              ? "bg-stone-900 border border-emerald-500/40 text-emerald-300"
+                              : "bg-stone-950 text-amber-300"
+                          }`}>
+                            <span className="font-bold">Claim Code: {userPrediction.claimCode}</span>
+                            <button
+                              type="button"
+                              onClick={() => handleCopyCode(userPrediction.claimCode!)}
+                              className="text-white hover:text-amber-200 cursor-pointer"
+                              title="Copy code"
+                            >
+                              {copiedCode === userPrediction.claimCode ? <Check size={13} className="text-emerald-400" /> : <Copy size={13} />}
+                            </button>
+                          </div>
+                        )}
                       </div>
 
-                      {userPrediction.claimCode && (
-                        <div className="bg-stone-950/90 text-amber-300 px-3 py-1.5 rounded-lg font-mono text-xs flex items-center gap-2">
-                          <span>Ref: {userPrediction.claimCode}</span>
-                          <button
-                            type="button"
-                            onClick={() => handleCopyCode(userPrediction.claimCode!)}
-                            className="text-white hover:text-amber-200 cursor-pointer"
-                          >
-                            <Copy size={13} />
-                          </button>
+                      <div className={`grid grid-cols-1 sm:grid-cols-3 gap-2 pt-2 border-t text-xs font-mono ${
+                        userPrediction.prizeCollected ? "border-emerald-800/40 text-stone-300" : "border-amber-600/30 text-stone-900"
+                      }`}>
+                        <div>
+                          <span className="text-[10px] block opacity-80">Entrant</span>
+                          <strong className="block truncate">{userPrediction.displayName || authUser?.name || "Participant"}</strong>
                         </div>
-                      )}
+                        <div>
+                          <span className="text-[10px] block opacity-80">Email</span>
+                          <strong className="block truncate">{userPrediction.email || authUser?.email || "Signed In User"}</strong>
+                        </div>
+                        <div>
+                          <span className="text-[10px] block opacity-80">Match Fixture</span>
+                          <strong className="block truncate">{match.homeTeam} vs {match.awayTeam}</strong>
+                        </div>
+                      </div>
                     </div>
                   )}
 
@@ -1280,6 +1388,66 @@ export default function MatchDayPrize({ authUser, onOpenLogin }: MatchDayPrizePr
                           </button>
                         </div>
                       </div>
+
+                      {/* Winner Card if Grand Prize Winner */}
+                      {pred.grandPrizeWinner && (
+                        <div className={`p-3.5 rounded-xl border ${
+                          pred.prizeCollected
+                            ? "bg-emerald-950/40 border-emerald-500/50 text-white"
+                            : "bg-gradient-to-r from-amber-400 to-amber-500 text-stone-950 shadow-md border-amber-300"
+                        }`}>
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
+                            <div className="flex items-center gap-2">
+                              <Trophy size={18} className={pred.prizeCollected ? "text-emerald-400 shrink-0" : "text-stone-950 shrink-0"} />
+                              <div>
+                                <span className={`font-black text-xs block ${pred.prizeCollected ? "text-white" : "text-stone-950"}`}>
+                                  {pred.prizeCollected
+                                    ? `Prize collected on ${new Date(pred.collectedAt || pred.prizeCollectedAt || "").toLocaleDateString()}`
+                                    : "You won! Show this screen to the shop owner to collect your prize"}
+                                </span>
+                                <span className={`text-[11px] block ${pred.prizeCollected ? "text-stone-300" : "text-stone-900 font-medium"}`}>
+                                  {m?.prizeDescription || "Free Buna Single-Origin Coffee"}
+                                </span>
+                              </div>
+                            </div>
+
+                            {pred.claimCode && (
+                              <div className={`px-2.5 py-1 rounded font-mono text-[11px] font-bold flex items-center gap-2 self-start sm:self-auto ${
+                                pred.prizeCollected
+                                  ? "bg-stone-900 text-emerald-300 border border-emerald-500/40"
+                                  : "bg-stone-950 text-amber-300"
+                              }`}>
+                                <span>Claim Code: {pred.claimCode}</span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleCopyCode(pred.claimCode!)}
+                                  className="text-white hover:text-amber-200 cursor-pointer"
+                                  title="Copy code"
+                                >
+                                  {copiedCode === pred.claimCode ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
+                                </button>
+                              </div>
+                            )}
+                          </div>
+
+                          <div className={`grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1.5 border-t text-[11px] font-mono ${
+                            pred.prizeCollected ? "border-emerald-800/40 text-stone-300" : "border-amber-600/30 text-stone-900"
+                          }`}>
+                            <div>
+                              <span className="text-[9px] block opacity-80">Entrant</span>
+                              <strong className="block truncate">{pred.displayName || authUser?.name || "Participant"}</strong>
+                            </div>
+                            <div>
+                              <span className="text-[9px] block opacity-80">Email</span>
+                              <strong className="block truncate">{pred.email || authUser?.email || "Signed In User"}</strong>
+                            </div>
+                            <div>
+                              <span className="text-[9px] block opacity-80">Match</span>
+                              <strong className="block truncate">{m ? `${m.homeTeam} vs ${m.awayTeam}` : pred.matchId}</strong>
+                            </div>
+                          </div>
+                        </div>
+                      )}
 
                       {/* Picks Summary Grid */}
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs font-mono">

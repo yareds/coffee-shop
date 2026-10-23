@@ -1,6 +1,7 @@
 import fs from "fs";
 import path from "path";
 import os from "os";
+import crypto from "crypto";
 import { initializeApp, getApps } from "firebase-admin/app";
 import type { App } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
@@ -47,12 +48,15 @@ export interface PredictionMatch {
   weekKey: string; // ISO week e.g. "2026-W43"
   createdAt: string;
   auditHistory?: MatchAuditEntry[];
+  settledAt?: string;
+  correctedAt?: string;
 }
 
 export interface Prediction {
   matchId: string;
   uid: string;
   displayName: string;
+  email?: string;
   outcome: "HOME" | "AWAY" | "DRAW";
   scoreline: string; // strictly "Home:Away"
   playerName: string;
@@ -66,6 +70,7 @@ export interface Prediction {
   grandPrizeWinner?: boolean;
   prizeCollected?: boolean;
   prizeCollectedAt?: string;
+  collectedAt?: string;
   collectedBy?: string;
   claimCode?: string;
 }
@@ -474,7 +479,7 @@ export const INITIAL_STATE: AppState = {
       legsCorrect: 3,
       grandPrizeWinner: true,
       prizeCollected: false,
-      claimCode: "BUNA-WIN-MCIAS-U1ABE"
+      claimCode: "3F9B2A"
     },
     {
       matchId: "match_w42_mci_ast",
@@ -492,7 +497,7 @@ export const INITIAL_STATE: AppState = {
       legsCorrect: 1,
       grandPrizeWinner: false,
       prizeCollected: false,
-      claimCode: "BUNA-WIN-MCIAS-U2MAR"
+      claimCode: "7E1C84"
     }
   ],
   registeredUsers: [
@@ -527,7 +532,32 @@ let memoryState: AppState = JSON.parse(JSON.stringify(INITIAL_STATE));
 let firestoreConnected = false;
 let hasWarnedAuth = false;
 
+export function isPermissionError(err: any): boolean {
+  if (!err) return false;
+  const msg = err.message || String(err);
+  return (
+    err.code === 7 ||
+    err.code === 16 ||
+    msg.includes("PERMISSION_DENIED") ||
+    msg.includes("Missing or insufficient permissions") ||
+    msg.includes("UNAUTHENTICATED")
+  );
+}
+
 function logFirestoreFallback(op: string, err: any) {
+  if (isPermissionError(err)) {
+    isFirestoreAvailable = false;
+    if (!hasWarnedAuth) {
+      console.warn(`[Firestore Admin] Firestore credentials not authorized for this project (${err?.message || err}). Operating in in-memory state fallback mode.`);
+      hasWarnedAuth = true;
+    }
+    return;
+  }
+
+  if (checkHasLikelyCredentials()) {
+    console.error(`[Firestore Admin] Transient error during "${op}": ${err?.message || err}.`);
+    return;
+  }
   if (!hasWarnedAuth) {
     console.warn(`[Firestore Admin] Fallback active for "${op}": ${err?.message || err}. (In Cloud Run or with ADC credentials, Firestore connects directly).`);
     hasWarnedAuth = true;
@@ -535,7 +565,7 @@ function logFirestoreFallback(op: string, err: any) {
 }
 
 // Cheap upfront check for whether Google Cloud / Application Default Credentials are likely available
-function checkHasLikelyCredentials(): boolean {
+export function checkHasLikelyCredentials(): boolean {
   // 1. Explicit service account file via GOOGLE_APPLICATION_CREDENTIALS
   if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
     try {
@@ -553,12 +583,20 @@ function checkHasLikelyCredentials(): boolean {
     return true;
   }
 
-  // 3. Google Cloud hosted environment (Cloud Run, Cloud Functions, App Engine, GKE)
+  // 3. AI Studio preview environment check:
+  // In the AI Studio preview container (ais-dev-* or ais-pre-*), the ambient compute
+  // credentials belong to AI Studio's internal GCP infrastructure, not the user's Firebase project.
+  const kService = process.env.K_SERVICE || "";
+  if (kService.startsWith("ais-dev-") || kService.startsWith("ais-pre-")) {
+    return false;
+  }
+
+  // 4. Production Google Cloud hosted environment (Cloud Run, Cloud Functions, App Engine, GKE)
   if (process.env.K_SERVICE || process.env.FUNCTION_TARGET || process.env.GAE_ENV || process.env.GAE_INSTANCE) {
     return true;
   }
 
-  // 4. Well-known gcloud CLI Application Default Credentials file on developer machines
+  // 5. Well-known gcloud CLI Application Default Credentials file on developer machines
   try {
     const isWindows = process.platform === "win32";
     const adcPath = isWindows
@@ -617,23 +655,25 @@ export function getAdminDb(): Firestore | null {
 
   // Detect project configuration
   let targetProjectId = process.env.FIREBASE_PROJECT_ID || process.env.GCLOUD_PROJECT;
-  if (!targetProjectId) {
-    try {
-      const configPath = path.join(process.cwd(), "firebase-applet-config.json");
-      if (fs.existsSync(configPath)) {
-        const config = JSON.parse(fs.readFileSync(configPath, "utf-8"));
-        if (config.projectId) {
-          targetProjectId = config.projectId;
-        }
+  let targetDatabaseId: string | undefined;
+  try {
+    const configPath = path.join(process.cwd(), "firebase-applet-config.json");
+    if (fs.existsSync(configPath)) {
+      const config = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+      if (!targetProjectId && config.projectId) {
+        targetProjectId = config.projectId;
       }
-    } catch {
-      // ignore
+      if (config.firestoreDatabaseId && config.firestoreDatabaseId !== "(default)") {
+        targetDatabaseId = config.firestoreDatabaseId;
+      }
     }
+  } catch {
+    // ignore
   }
 
   const hasCredentials = checkHasLikelyCredentials();
   if (!hasCredentials) {
-    console.warn("[Firestore Admin] No Application Default Credentials found (missing GOOGLE_APPLICATION_CREDENTIALS, Cloud Run environment, or gcloud ADC). Firestore client will not be reachable; running in memoryState-only fallback mode.");
+    console.warn("[Firestore Admin] Running in local development / AI Studio preview environment without production credentials. Firestore client is operating in memory fallback mode.");
     isFirestoreAvailable = false;
     adminDb = null;
     collectionsInstance = null;
@@ -646,7 +686,7 @@ export function getAdminDb(): Firestore | null {
       } else {
         adminApp = getApps()[0];
       }
-      adminDb = getFirestore(adminApp);
+      adminDb = targetDatabaseId ? getFirestore(adminApp, targetDatabaseId) : getFirestore(adminApp);
       isFirestoreAvailable = true;
       collectionsInstance = {
         menuItems: adminDb.collection("menuItems"),
@@ -671,7 +711,6 @@ export function getAdminDb(): Firestore | null {
   if (isFirestoreAvailable && !hasInitiatedSeed) {
     hasInitiatedSeed = true;
     seedDatabaseIfEmpty().catch(err => {
-      isFirestoreAvailable = false;
       logFirestoreFallback("seedDatabaseIfEmpty init", err);
     });
   }
@@ -1125,27 +1164,24 @@ export async function verifyUserToken(token: string): Promise<{ uid: string; dis
         email: decoded.email
       };
     } catch (e: any) {
-      console.warn("[Auth] Firebase Admin token verification failed, using token payload parser:", e.message);
-      try {
-        const parts = token.split(".");
-        if (parts.length === 3) {
-          const payload = JSON.parse(Buffer.from(parts[1], "base64").toString("utf8"));
-          if (payload.sub || payload.user_id) {
-            return {
-              uid: payload.sub || payload.user_id,
-              displayName: payload.name || payload.displayName || payload.email?.split("@")[0] || "Explorer",
-              email: payload.email
-            };
-          }
-        }
-      } catch {
-        // ignore
+      if (process.env.ALLOW_UNVERIFIED_TOKENS === "true" && process.env.NODE_ENV !== "production") {
+        console.warn("⚠️ SECURITY WARNING: ALLOW_UNVERIFIED_TOKENS is active in non-production environment. Insecurely parsing unverified token payload!");
+        return parseUnverifiedTokenEscapeHatch(token);
       }
       return null;
     }
   }
 
-  // Fallback for offline dev container when Admin SDK cannot connect
+  // Admin SDK is unavailable
+  if (process.env.ALLOW_UNVERIFIED_TOKENS === "true" && process.env.NODE_ENV !== "production") {
+    console.warn("⚠️ SECURITY WARNING: ALLOW_UNVERIFIED_TOKENS is active in non-production environment and Admin SDK is unavailable. Insecurely parsing unverified token payload!");
+    return parseUnverifiedTokenEscapeHatch(token);
+  }
+
+  return null;
+}
+
+function parseUnverifiedTokenEscapeHatch(token: string): { uid: string; displayName: string; email?: string } | null {
   try {
     const parts = token.split(".");
     if (parts.length === 3) {
@@ -1175,7 +1211,9 @@ export async function getAllPredictionMatches(): Promise<PredictionMatch[]> {
         return matches;
       }
     } catch (err) {
-      isFirestoreAvailable = false;
+      if (!checkHasLikelyCredentials()) {
+        isFirestoreAvailable = false;
+      }
       logFirestoreFallback("getAllPredictionMatches", err);
     }
   }
@@ -1191,7 +1229,9 @@ export async function getPredictionMatch(matchId: string): Promise<PredictionMat
         return docSnap.data() as PredictionMatch;
       }
     } catch (err) {
-      isFirestoreAvailable = false;
+      if (!checkHasLikelyCredentials()) {
+        isFirestoreAvailable = false;
+      }
       logFirestoreFallback("getPredictionMatch", err);
     }
   }
@@ -1202,11 +1242,21 @@ export async function getFeaturedMatch(): Promise<{ match: PredictionMatch | nul
   getAdminDb();
   const serverNow = new Date().toISOString();
   const allMatches = await getAllPredictionMatches();
-  
-  // Prefer active scheduled match nearest to now, otherwise most recent settled match
-  let match = allMatches.find(m => m.status === "scheduled");
-  if (!match) {
-    match = allMatches[0] || null;
+  const nowMs = new Date(serverNow).getTime();
+
+  // Return nearest upcoming scheduled match (earliest future kickoffAt), else most recent match by kickoffAt
+  const upcomingScheduled = allMatches
+    .filter(m => m.status === "scheduled" && new Date(m.kickoffAt).getTime() >= nowMs)
+    .sort((a, b) => new Date(a.kickoffAt).getTime() - new Date(b.kickoffAt).getTime());
+
+  let match: PredictionMatch | null = null;
+  if (upcomingScheduled.length > 0) {
+    match = upcomingScheduled[0];
+  } else {
+    const sortedByKickoff = [...allMatches].sort(
+      (a, b) => new Date(b.kickoffAt).getTime() - new Date(a.kickoffAt).getTime()
+    );
+    match = sortedByKickoff[0] || null;
   }
 
   let totalEntries = 0;
@@ -1216,7 +1266,9 @@ export async function getFeaturedMatch(): Promise<{ match: PredictionMatch | nul
         const snap = await COLLECTIONS.predictions.where("matchId", "==", match.id).get();
         totalEntries = snap.size;
       } catch (err) {
-        isFirestoreAvailable = false;
+        if (!checkHasLikelyCredentials()) {
+          isFirestoreAvailable = false;
+        }
         logFirestoreFallback("getFeaturedMatch entries", err);
         totalEntries = memoryState.predictions.filter(p => p.matchId === match?.id).length;
       }
@@ -1230,22 +1282,53 @@ export async function getFeaturedMatch(): Promise<{ match: PredictionMatch | nul
 
 export async function savePredictionMatch(matchData: {
   id?: string;
-  homeTeam: string;
-  awayTeam: string;
-  competition: string;
+  homeTeam?: string;
+  awayTeam?: string;
+  competition?: string;
   kickoffAt: string;
-  prizeDescription: string;
+  prizeDescription?: string;
   players: MatchPlayer[];
-}): Promise<{ success: boolean; match?: PredictionMatch; warning?: string; error?: string }> {
+}): Promise<{ success: boolean; status?: number; match?: PredictionMatch; warning?: string; error?: string }> {
   getAdminDb();
+
+  const homeTeam = typeof matchData.homeTeam === "string" ? matchData.homeTeam.trim() : "";
+  const awayTeam = typeof matchData.awayTeam === "string" ? matchData.awayTeam.trim() : "";
+  if (!homeTeam || !awayTeam) {
+    return { success: false, status: 400, error: "homeTeam and awayTeam are required." };
+  }
+
+  if (!matchData.kickoffAt || typeof matchData.kickoffAt !== "string") {
+    return { success: false, status: 400, error: "kickoffAt is required." };
+  }
 
   const kickoffDate = new Date(matchData.kickoffAt);
   if (isNaN(kickoffDate.getTime())) {
-    return { success: false, error: "Invalid kickoffAt timestamp." };
+    return { success: false, status: 400, error: "Invalid kickoffAt timestamp." };
   }
 
+  if (!Array.isArray(matchData.players) || matchData.players.length === 0) {
+    return { success: false, status: 400, error: "A non-empty list of players is required." };
+  }
+  for (const p of matchData.players) {
+    if (!p || typeof p.name !== "string" || !p.name.trim()) {
+      return { success: false, status: 400, error: "Every player must have a non-empty string name." };
+    }
+  }
+
+  const sanitizedPlayers: MatchPlayer[] = matchData.players.map(p => ({
+    ...p,
+    name: p.name.trim()
+  }));
+
+  const competition = (typeof matchData.competition === "string" && matchData.competition.trim())
+    ? matchData.competition.trim()
+    : "Premier Matchday";
+
+  const prizeDescription = (typeof matchData.prizeDescription === "string" && matchData.prizeDescription.trim())
+    ? matchData.prizeDescription.trim()
+    : "1 Year of Free Buna Single-Origin Coffee";
+
   let warning: string | undefined;
-  // Saturday is day 6 in UTC
   if (kickoffDate.getUTCDay() !== 6) {
     warning = "Notice: The kickoff date is not on a Saturday.";
   }
@@ -1254,69 +1337,91 @@ export async function savePredictionMatch(matchData: {
   const isEditing = Boolean(matchData.id);
   const matchId = matchData.id || "match_" + Date.now();
 
+  let existing: PredictionMatch | null = null;
   if (isEditing) {
-    const existing = await getPredictionMatch(matchId);
+    existing = await getPredictionMatch(matchId);
     if (!existing) {
-      return { success: false, error: "Match not found to edit." };
+      return { success: false, status: 404, error: "Match not found to edit." };
     }
     const now = new Date();
     if (now >= new Date(existing.kickoffAt)) {
-      return { success: false, error: "Cannot edit match after kickoff." };
+      return { success: false, status: 400, error: "Cannot edit match after kickoff." };
     }
   }
+
+  // Reject creating a second non-void match with the same weekKey (409)
+  const allMatches = await getAllPredictionMatches();
+  const duplicateWeek = allMatches.some(m => m.id !== matchId && m.weekKey === weekKey && m.status !== "void");
+  if (duplicateWeek) {
+    return { success: false, status: 409, error: `A match for week ${weekKey} already exists. Only one non-void match per week is permitted.` };
+  }
+
+  // Don't let editing turn a "void" or "settled" match back into "scheduled", and don't overwrite createdAt
+  const status: "scheduled" | "settled" | "void" = existing && (existing.status === "void" || existing.status === "settled")
+    ? existing.status
+    : "scheduled";
+
+  const createdAt = existing?.createdAt || new Date().toISOString();
 
   const match: PredictionMatch = {
     id: matchId,
-    homeTeam: matchData.homeTeam.trim(),
-    awayTeam: matchData.awayTeam.trim(),
-    competition: matchData.competition.trim() || "Premier Matchday",
+    homeTeam,
+    awayTeam,
+    competition,
     kickoffAt: kickoffDate.toISOString(),
-    status: "scheduled",
-    prizeDescription: matchData.prizeDescription.trim() || "1 Year of Free Buna Single-Origin Coffee",
-    players: matchData.players,
+    status,
+    prizeDescription,
+    players: sanitizedPlayers,
     weekKey,
-    createdAt: new Date().toISOString()
+    createdAt,
+    ...(existing?.settledAt ? { settledAt: existing.settledAt } : {}),
+    ...(existing?.correctedAt ? { correctedAt: existing.correctedAt } : {}),
+    ...(existing?.result ? { result: existing.result } : {}),
+    ...(existing?.auditHistory ? { auditHistory: existing.auditHistory } : {})
   };
 
-  const idx = memoryState.predictionMatches.findIndex(m => m.id === matchId);
-  if (idx >= 0) {
-    memoryState.predictionMatches[idx] = { ...memoryState.predictionMatches[idx], ...match };
-  } else {
-    memoryState.predictionMatches.unshift(match);
-  }
-
-  if (isFirestoreAvailable && COLLECTIONS) {
+  const hasCredentials = checkHasLikelyCredentials();
+  if (hasCredentials && isFirestoreAvailable && COLLECTIONS) {
     try {
       await COLLECTIONS.predictionMatches.doc(matchId).set(match, { merge: true });
     } catch (err) {
-      isFirestoreAvailable = false;
       logFirestoreFallback("savePredictionMatch", err);
+      return { success: false, status: 503, error: "Please try again" };
     }
+  }
+
+  const idx = memoryState.predictionMatches.findIndex(m => m.id === matchId);
+  if (idx >= 0) {
+    memoryState.predictionMatches[idx] = match;
+  } else {
+    memoryState.predictionMatches.unshift(match);
   }
 
   return { success: true, match, warning };
 }
 
-export async function voidPredictionMatch(matchId: string): Promise<{ success: boolean; match?: PredictionMatch; error?: string }> {
+export async function voidPredictionMatch(matchId: string): Promise<{ success: boolean; status?: number; match?: PredictionMatch; error?: string }> {
   getAdminDb();
   const match = await getPredictionMatch(matchId);
   if (!match) {
-    return { success: false, error: "Match not found." };
+    return { success: false, status: 404, error: "Match not found." };
   }
 
   match.status = "void";
-  const idx = memoryState.predictionMatches.findIndex(m => m.id === matchId);
-  if (idx >= 0) {
-    memoryState.predictionMatches[idx].status = "void";
-  }
 
-  if (isFirestoreAvailable && COLLECTIONS) {
+  const hasCredentials = checkHasLikelyCredentials();
+  if (hasCredentials && isFirestoreAvailable && COLLECTIONS) {
     try {
       await COLLECTIONS.predictionMatches.doc(matchId).set({ status: "void" }, { merge: true });
     } catch (err) {
-      isFirestoreAvailable = false;
       logFirestoreFallback("voidPredictionMatch", err);
+      return { success: false, status: 503, error: "Please try again" };
     }
+  }
+
+  const idx = memoryState.predictionMatches.findIndex(m => m.id === matchId);
+  if (idx >= 0) {
+    memoryState.predictionMatches[idx].status = "void";
   }
 
   return { success: true, match };
@@ -1325,18 +1430,27 @@ export async function voidPredictionMatch(matchId: string): Promise<{ success: b
 export async function getUserPrediction(matchId: string, uid: string): Promise<Prediction | null> {
   getAdminDb();
   const docId = `${matchId}_${uid}`;
+  let pred: Prediction | null = null;
   if (isFirestoreAvailable && COLLECTIONS) {
     try {
       const snap = await COLLECTIONS.predictions.doc(docId).get();
       if (snap.exists) {
-        return snap.data() as Prediction;
+        pred = snap.data() as Prediction;
       }
     } catch (err) {
-      isFirestoreAvailable = false;
+      if (!checkHasLikelyCredentials()) {
+        isFirestoreAvailable = false;
+      }
       logFirestoreFallback("getUserPrediction", err);
     }
   }
-  return memoryState.predictions.find(p => p.matchId === matchId && p.uid === uid) || null;
+  if (!pred) {
+    pred = memoryState.predictions.find(p => p.matchId === matchId && p.uid === uid) || null;
+  }
+  if (pred) {
+    pred.claimCode = pred.claimCode || computeClaimCode(pred.matchId, pred.uid);
+  }
+  return pred;
 }
 
 export async function saveUserPrediction(
@@ -1344,36 +1458,48 @@ export async function saveUserPrediction(
   uid: string,
   displayName: string,
   data: {
-    outcome: "HOME" | "AWAY" | "DRAW";
+    outcome: string;
     scoreline: string;
     playerName: string;
     playerGoals: number;
-  }
+  },
+  email?: string
 ): Promise<{ success: boolean; status?: number; error?: string; prediction?: Prediction; serverNow: string }> {
   const db = getAdminDb();
   const serverNow = new Date().toISOString();
 
   // Validate Leg 1
-  if (!["HOME", "AWAY", "DRAW"].includes(data.outcome)) {
+  if (!data || typeof data.outcome !== "string" || !["HOME", "AWAY", "DRAW"].includes(data.outcome.trim())) {
     return { success: false, status: 400, error: "Invalid outcome. Must be HOME, AWAY, or DRAW.", serverNow };
   }
+  const cleanOutcome = data.outcome.trim() as "HOME" | "AWAY" | "DRAW";
 
   // Validate Leg 2: strictly string "Home:Away" with /^(0|[1-9][0-9]?):(0|[1-9][0-9]?)$/
   const scorelinePattern = /^(0|[1-9][0-9]?):(0|[1-9][0-9]?)$/;
-  if (!scorelinePattern.test(data.scoreline)) {
+  if (typeof data.scoreline !== "string" || !scorelinePattern.test(data.scoreline.trim())) {
     return { success: false, status: 400, error: "Invalid scoreline format. Must be strictly 'Home:Away' (e.g. '3:1' or '0:0' without spaces or leading zeros).", serverNow };
   }
+  const cleanScoreline = data.scoreline.trim();
 
   // Validate Leg 3
+  if (typeof data.playerName !== "string" || !data.playerName.trim()) {
+    return { success: false, status: 400, error: "Player name is required and must be a non-empty string.", serverNow };
+  }
+  const trimmedPlayerName = data.playerName.trim();
+
   const playerGoals = Number(data.playerGoals);
-  if (!Number.isInteger(playerGoals) || playerGoals < 0 || playerGoals > 10) {
+  if (data.playerGoals === undefined || data.playerGoals === null || !Number.isInteger(playerGoals) || playerGoals < 0 || playerGoals > 10) {
     return { success: false, status: 400, error: "Invalid player goals. Must be an integer between 0 and 10.", serverNow };
   }
 
   const docId = `${matchId}_${uid}`;
+  const hasCredentials = checkHasLikelyCredentials();
 
-  // Firestore transaction if available
-  if (isFirestoreAvailable && db && COLLECTIONS) {
+  // Firestore transaction if credentials exist
+  if (hasCredentials) {
+    if (!db || !COLLECTIONS) {
+      return { success: false, status: 503, error: "Please try again", serverNow };
+    }
     try {
       const result = await db.runTransaction(async (transaction) => {
         const matchRef = COLLECTIONS.predictionMatches.doc(matchId);
@@ -1393,23 +1519,27 @@ export async function saveUserPrediction(
           return { success: false, status: 403, error: "Kickoff has passed. Predictions for this match are locked." };
         }
 
-        const isPlayerValid = match.players.some(p => p.name.toLowerCase() === data.playerName.toLowerCase());
-        if (!isPlayerValid) {
+        // Canonicalise playerName to roster's exact spelling (case-insensitive, trimmed match)
+        const rosterPlayer = match.players?.find(p => p.name.trim().toLowerCase() === trimmedPlayerName.toLowerCase());
+        if (!rosterPlayer) {
           return { success: false, status: 400, error: "Selected player is not in this match roster." };
         }
+        const canonicalPlayerName = rosterPlayer.name.trim();
 
         const predRef = COLLECTIONS.predictions.doc(docId);
         const existingSnap = await transaction.get(predRef);
         const existingData = existingSnap.exists ? (existingSnap.data() as Prediction) : null;
         const nowIso = now.toISOString();
+        const cleanEmail = email?.trim() || existingData?.email || undefined;
 
         const prediction: Prediction = {
           matchId,
           uid,
           displayName: displayName || "Explorer",
-          outcome: data.outcome,
-          scoreline: data.scoreline,
-          playerName: data.playerName,
+          ...(cleanEmail ? { email: cleanEmail } : {}),
+          outcome: cleanOutcome,
+          scoreline: cleanScoreline,
+          playerName: canonicalPlayerName,
           playerGoals,
           submittedAt: existingData ? existingData.submittedAt : nowIso,
           updatedAt: nowIso
@@ -1429,12 +1559,13 @@ export async function saveUserPrediction(
       }
       return { ...result, serverNow };
     } catch (err: any) {
-      isFirestoreAvailable = false;
       logFirestoreFallback("saveUserPrediction transaction", err);
+      // Return 503 without falling back to memory when credentials are configured
+      return { success: false, status: 503, error: "Please try again", serverNow };
     }
   }
 
-  // Memory fallback
+  // Memory fallback ONLY when no credentials are configured (local dev)
   const match = memoryState.predictionMatches.find(m => m.id === matchId);
   if (!match) {
     return { success: false, status: 404, error: "Match not found.", serverNow };
@@ -1449,22 +1580,25 @@ export async function saveUserPrediction(
     return { success: false, status: 403, error: "Kickoff has passed. Predictions for this match are locked.", serverNow };
   }
 
-  const isPlayerValid = match.players.some(p => p.name.toLowerCase() === data.playerName.toLowerCase());
-  if (!isPlayerValid) {
+  const rosterPlayer = match.players?.find(p => p.name.trim().toLowerCase() === trimmedPlayerName.toLowerCase());
+  if (!rosterPlayer) {
     return { success: false, status: 400, error: "Selected player is not in this match roster.", serverNow };
   }
+  const canonicalPlayerName = rosterPlayer.name.trim();
 
   const nowIso = now.toISOString();
   const existingIndex = memoryState.predictions.findIndex(p => p.matchId === matchId && p.uid === uid);
   const existingPred = existingIndex >= 0 ? memoryState.predictions[existingIndex] : null;
+  const cleanEmail = email?.trim() || existingPred?.email || undefined;
 
   const prediction: Prediction = {
     matchId,
     uid,
     displayName: displayName || "Explorer",
-    outcome: data.outcome,
-    scoreline: data.scoreline,
-    playerName: data.playerName,
+    ...(cleanEmail ? { email: cleanEmail } : {}),
+    outcome: cleanOutcome,
+    scoreline: cleanScoreline,
+    playerName: canonicalPlayerName,
     playerGoals,
     submittedAt: existingPred ? existingPred.submittedAt : nowIso,
     updatedAt: nowIso
@@ -1479,26 +1613,47 @@ export async function saveUserPrediction(
   return { success: true, prediction, serverNow };
 }
 
+export function computeClaimCode(matchId: string, uid: string): string {
+  const secret = (process.env.ADMIN_TOKEN_SECRET || "").trim() || "default_buna_admin_secret";
+  return crypto.createHmac("sha256", secret).update(`${matchId}:${uid}`).digest("hex").slice(0, 6).toUpperCase();
+}
+
 export function generateClaimCode(matchId: string, uid: string): string {
-  const mPart = matchId.replace(/[^a-zA-Z0-9]/g, "").slice(-5).toUpperCase();
-  const uPart = uid.replace(/[^a-zA-Z0-9]/g, "").slice(0, 5).toUpperCase();
-  return `BUNA-WIN-${mPart}-${uPart}`;
+  return computeClaimCode(matchId, uid);
 }
 
 export async function settlePredictionMatch(
   matchId: string,
   homeGoals: number,
   awayGoals: number,
-  playerGoals: Record<string, number>
-): Promise<{ success: boolean; match?: PredictionMatch; stats?: any; error?: string }> {
+  playerGoals: Record<string, number>,
+  options?: { correction?: boolean }
+): Promise<{ success: boolean; status?: number; match?: PredictionMatch; stats?: any; error?: string }> {
   const db = getAdminDb();
   const match = await getPredictionMatch(matchId);
   if (!match) {
-    return { success: false, error: "Match not found." };
+    return { success: false, status: 404, error: "Match not found." };
   }
 
   if (match.status === "void") {
-    return { success: false, error: "Cannot settle a void match." };
+    return { success: false, status: 400, error: "Cannot settle a void match." };
+  }
+
+  // Refuse to settle before kickoffAt
+  const now = new Date();
+  if (now < new Date(match.kickoffAt)) {
+    return { success: false, status: 400, error: "Cannot settle match before kickoff time." };
+  }
+
+  const isCorrection = Boolean(options?.correction);
+
+  // Accidental re-settlement prevention: return 409 if already settled unless deliberate correction
+  if (match.status === "settled" && !isCorrection) {
+    return {
+      success: false,
+      status: 409,
+      error: "Match is already settled. To update results, a deliberate correction must be requested."
+    };
   }
 
   const actualOutcome = homeGoals > awayGoals ? "HOME" : homeGoals < awayGoals ? "AWAY" : "DRAW";
@@ -1506,17 +1661,48 @@ export async function settlePredictionMatch(
 
   // Fetch all predictions for this match
   let predictions: Prediction[] = [];
-  if (isFirestoreAvailable && COLLECTIONS) {
+  const hasCredentials = checkHasLikelyCredentials();
+
+  if (hasCredentials && isFirestoreAvailable && COLLECTIONS) {
     try {
       const snap = await COLLECTIONS.predictions.where("matchId", "==", matchId).get();
       predictions = snap.docs.map(d => d.data() as Prediction);
     } catch (err) {
-      isFirestoreAvailable = false;
       logFirestoreFallback("settlePredictionMatch get preds", err);
-      predictions = memoryState.predictions.filter(p => p.matchId === matchId);
+      return { success: false, status: 503, error: "Failed to load predictions for match settlement. Please try again." };
     }
   } else {
     predictions = memoryState.predictions.filter(p => p.matchId === matchId);
+  }
+
+  // If deliberate correction, disallow if any prediction has prizeCollected === true
+  if (isCorrection) {
+    const anyPrizeCollected = predictions.some(p => p.prizeCollected === true);
+    if (anyPrizeCollected) {
+      return {
+        success: false,
+        status: 409,
+        error: "Cannot correct match results: one or more grand prize winners have already collected their prize."
+      };
+    }
+  }
+
+  // Store settledAt (and correctedAt)
+  const nowIso = now.toISOString();
+  if (!match.settledAt) {
+    match.settledAt = nowIso;
+  }
+  if (isCorrection) {
+    match.correctedAt = nowIso;
+  }
+
+  // Leg 3 names: compare canonical names
+  const canonicalGoalsMap = new Map<string, number>();
+  for (const [rawName, goals] of Object.entries(playerGoals || {})) {
+    const trimmed = rawName.trim().toLowerCase();
+    const rosterPlayer = match.players?.find(pl => pl.name.trim().toLowerCase() === trimmed);
+    const key = rosterPlayer ? rosterPlayer.name.trim().toLowerCase() : trimmed;
+    canonicalGoalsMap.set(key, Number(goals) || 0);
   }
 
   let leg1CorrectCount = 0;
@@ -1527,7 +1713,7 @@ export async function settlePredictionMatch(
   const settledPredictions: Prediction[] = predictions.map(p => {
     const leg1Correct = p.outcome === actualOutcome;
     const leg2Correct = p.scoreline === exactScoreline;
-    const expectedGoals = Number(playerGoals[p.playerName] ?? 0);
+    const expectedGoals = canonicalGoalsMap.get(p.playerName.trim().toLowerCase()) ?? 0;
     const leg3Correct = Number(p.playerGoals) === expectedGoals;
     const legsCorrect = (leg1Correct ? 1 : 0) + (leg2Correct ? 1 : 0) + (leg3Correct ? 1 : 0);
     const grandPrizeWinner = legsCorrect === 3;
@@ -1559,6 +1745,48 @@ export async function settlePredictionMatch(
   match.status = "settled";
   match.result = updatedResult;
 
+  // Persist writes in chunks of 400 documents
+  if (hasCredentials) {
+    if (!db || !COLLECTIONS) {
+      return { success: false, status: 503, error: "Database not available. Please try again." };
+    }
+    try {
+      const matchUpdates: any = {
+        status: "settled",
+        result: updatedResult,
+        settledAt: match.settledAt
+      };
+      if (match.correctedAt) {
+        matchUpdates.correctedAt = match.correctedAt;
+      }
+
+      type BatchOp = { ref: FirebaseFirestore.DocumentReference; data: any };
+      const ops: BatchOp[] = [
+        { ref: COLLECTIONS.predictionMatches.doc(matchId), data: matchUpdates }
+      ];
+
+      for (const sp of settledPredictions) {
+        ops.push({
+          ref: COLLECTIONS.predictions.doc(`${matchId}_${sp.uid}`),
+          data: sp
+        });
+      }
+
+      const CHUNK_SIZE = 400;
+      for (let i = 0; i < ops.length; i += CHUNK_SIZE) {
+        const chunk = ops.slice(i, i + CHUNK_SIZE);
+        const batch = db.batch();
+        for (const op of chunk) {
+          batch.set(op.ref, op.data, { merge: true });
+        }
+        await batch.commit();
+      }
+    } catch (err: any) {
+      logFirestoreFallback("settlePredictionMatch commit", err);
+      return { success: false, status: 503, error: "Failed to persist settlement writes to database. Please try again." };
+    }
+  }
+
   // Persist to memory
   const mIdx = memoryState.predictionMatches.findIndex(m => m.id === matchId);
   if (mIdx >= 0) {
@@ -1572,22 +1800,6 @@ export async function settlePredictionMatch(
       memoryState.predictions.push(sp);
     }
   });
-
-  // Persist to Firestore
-  if (isFirestoreAvailable && db && COLLECTIONS) {
-    try {
-      const batch = db.batch();
-      batch.set(COLLECTIONS.predictionMatches.doc(matchId), { status: "settled", result: updatedResult }, { merge: true });
-      for (const sp of settledPredictions) {
-        const predRef = COLLECTIONS.predictions.doc(`${matchId}_${sp.uid}`);
-        batch.set(predRef, sp, { merge: true });
-      }
-      await batch.commit();
-    } catch (err) {
-      isFirestoreAvailable = false;
-      logFirestoreFallback("settlePredictionMatch commit", err);
-    }
-  }
 
   const stats = {
     totalEntries: settledPredictions.length,
@@ -1607,27 +1819,33 @@ export async function correctPredictionMatchResult(
   playerGoals: Record<string, number>,
   reason: string,
   adminEmail: string
-): Promise<{ success: boolean; match?: PredictionMatch; stats?: any; error?: string }> {
+): Promise<{ success: boolean; status?: number; match?: PredictionMatch; stats?: any; error?: string }> {
   const match = await getPredictionMatch(matchId);
   if (!match) {
-    return { success: false, error: "Match not found to correct." };
+    return { success: false, status: 404, error: "Match not found to correct." };
   }
 
   if (match.status !== "settled") {
-    return { success: false, error: "Only settled matches can have results corrected with audit history." };
+    return { success: false, status: 400, error: "Only settled matches can have results corrected with audit history." };
+  }
+
+  const settleRes = await settlePredictionMatch(matchId, homeGoals, awayGoals, playerGoals, { correction: true });
+  if (!settleRes.success) {
+    return settleRes;
   }
 
   const auditEntry: MatchAuditEntry = {
     id: "audit_" + Date.now(),
     changedAt: new Date().toISOString(),
-    adminEmail: adminEmail || "yared.abegaz@gmail.com",
+    adminEmail: adminEmail || (process.env.ADMIN_EMAIL || "").trim() || "admin",
     reason: reason.trim() || "VAR correction / Official score revision",
     previousResult: match.result ? JSON.parse(JSON.stringify(match.result)) : undefined,
     newResult: {
       homeGoals,
       awayGoals,
       playerGoals
-    }
+    },
+    affectedWinnersCount: settleRes.stats?.grandPrizeWinnersCount || 0
   };
 
   if (!match.auditHistory) {
@@ -1635,15 +1853,8 @@ export async function correctPredictionMatchResult(
   }
   match.auditHistory.unshift(auditEntry);
 
-  const settleRes = await settlePredictionMatch(matchId, homeGoals, awayGoals, playerGoals);
-  if (!settleRes.success) {
-    return settleRes;
-  }
-
-  auditEntry.affectedWinnersCount = settleRes.stats?.grandPrizeWinnersCount || 0;
-
-  // Persist audit history
-  if (isFirestoreAvailable && COLLECTIONS) {
+  const hasCredentials = checkHasLikelyCredentials();
+  if (hasCredentials && isFirestoreAvailable && COLLECTIONS) {
     try {
       await COLLECTIONS.predictionMatches.doc(matchId).set({ auditHistory: match.auditHistory }, { merge: true });
     } catch (e) {
@@ -1688,6 +1899,7 @@ export async function getMatchWinners(matchId: string): Promise<Array<{
   displayName: string;
   prizeCollected: boolean;
   prizeCollectedAt?: string;
+  collectedAt?: string;
   collectedBy?: string;
   claimCode?: string;
 }>> {
@@ -1708,9 +1920,110 @@ export async function getMatchWinners(matchId: string): Promise<Array<{
     uid: p.uid,
     displayName: formatWinnerName(p.displayName),
     prizeCollected: Boolean(p.prizeCollected),
-    prizeCollectedAt: p.prizeCollectedAt,
+    prizeCollectedAt: p.prizeCollectedAt || p.collectedAt,
+    collectedAt: p.collectedAt || p.prizeCollectedAt,
     collectedBy: p.collectedBy,
-    claimCode: p.claimCode || generateClaimCode(matchId, p.uid)
+    claimCode: p.claimCode || computeClaimCode(matchId, p.uid)
+  }));
+}
+
+export async function getAdminMatchWinners(matchId: string): Promise<Array<{
+  uid: string;
+  displayName: string;
+  email: string;
+  prizeCollected: boolean;
+  prizeCollectedAt?: string;
+  collectedAt?: string;
+  collectedBy?: string;
+  claimCode: string;
+}>> {
+  getAdminDb();
+  let predictions: Prediction[] = [];
+  if (isFirestoreAvailable && COLLECTIONS) {
+    try {
+      const snap = await COLLECTIONS.predictions.where("matchId", "==", matchId).where("grandPrizeWinner", "==", true).get();
+      predictions = snap.docs.map(d => d.data() as Prediction);
+    } catch (err) {
+      predictions = memoryState.predictions.filter(p => p.matchId === matchId && p.grandPrizeWinner);
+    }
+  } else {
+    predictions = memoryState.predictions.filter(p => p.matchId === matchId && p.grandPrizeWinner);
+  }
+
+  const registeredUsers = await getRegisteredUsers();
+  const userMap = new Map<string, string>();
+  registeredUsers.forEach(u => {
+    if (u.id && u.email) userMap.set(u.id, u.email);
+  });
+
+  return predictions.map(p => ({
+    uid: p.uid,
+    displayName: p.displayName, // Full name for admin
+    email: p.email || userMap.get(p.uid) || "",
+    prizeCollected: Boolean(p.prizeCollected),
+    prizeCollectedAt: p.prizeCollectedAt || p.collectedAt,
+    collectedAt: p.collectedAt || p.prizeCollectedAt,
+    collectedBy: p.collectedBy,
+    claimCode: (p.claimCode && p.claimCode.length === 6) ? p.claimCode : computeClaimCode(matchId, p.uid)
+  }));
+}
+
+export async function getMatchEntries(matchId: string): Promise<Array<{
+  uid: string;
+  displayName: string;
+  email: string;
+  outcome: "HOME" | "AWAY" | "DRAW";
+  scoreline: string;
+  playerName: string;
+  playerGoals: number;
+  submittedAt: string;
+  updatedAt: string;
+  leg1Correct?: boolean;
+  leg2Correct?: boolean;
+  leg3Correct?: boolean;
+  legsCorrect?: number;
+  grandPrizeWinner?: boolean;
+  prizeCollected?: boolean;
+  collectedAt?: string;
+  claimCode: string;
+}>> {
+  getAdminDb();
+  let predictions: Prediction[] = [];
+  if (isFirestoreAvailable && COLLECTIONS) {
+    try {
+      const snap = await COLLECTIONS.predictions.where("matchId", "==", matchId).get();
+      predictions = snap.docs.map(d => d.data() as Prediction);
+    } catch (err) {
+      predictions = memoryState.predictions.filter(p => p.matchId === matchId);
+    }
+  } else {
+    predictions = memoryState.predictions.filter(p => p.matchId === matchId);
+  }
+
+  const registeredUsers = await getRegisteredUsers();
+  const userMap = new Map<string, string>();
+  registeredUsers.forEach(u => {
+    if (u.id && u.email) userMap.set(u.id, u.email);
+  });
+
+  return predictions.map(p => ({
+    uid: p.uid,
+    displayName: p.displayName,
+    email: p.email || userMap.get(p.uid) || "",
+    outcome: p.outcome,
+    scoreline: p.scoreline,
+    playerName: p.playerName,
+    playerGoals: p.playerGoals,
+    submittedAt: p.submittedAt,
+    updatedAt: p.updatedAt,
+    leg1Correct: p.leg1Correct,
+    leg2Correct: p.leg2Correct,
+    leg3Correct: p.leg3Correct,
+    legsCorrect: p.legsCorrect,
+    grandPrizeWinner: p.grandPrizeWinner,
+    prizeCollected: p.prizeCollected,
+    collectedAt: p.collectedAt || p.prizeCollectedAt,
+    claimCode: (p.claimCode && p.claimCode.length === 6) ? p.claimCode : computeClaimCode(matchId, p.uid)
   }));
 }
 
@@ -1718,48 +2031,88 @@ export async function markPredictionPrizeCollected(
   matchId: string,
   uid: string,
   collected: boolean = true,
-  adminEmail: string = "yared.abegaz@gmail.com"
-): Promise<{ success: boolean; error?: string; prediction?: Prediction }> {
+  adminEmail: string = (process.env.ADMIN_EMAIL || "").trim() || "admin"
+): Promise<{ success: boolean; status?: number; error?: string; prediction?: Prediction }> {
   getAdminDb();
   const docId = `${matchId}_${uid}`;
   const nowIso = new Date().toISOString();
+  const hasCredentials = checkHasLikelyCredentials();
 
-  let targetPred: Prediction | null = null;
-  const pIdx = memoryState.predictions.findIndex(p => p.matchId === matchId && p.uid === uid);
-  if (pIdx >= 0) {
-    memoryState.predictions[pIdx].prizeCollected = collected;
-    if (collected) {
-      memoryState.predictions[pIdx].prizeCollectedAt = nowIso;
-      memoryState.predictions[pIdx].collectedBy = adminEmail;
-    } else {
-      delete memoryState.predictions[pIdx].prizeCollectedAt;
-      delete memoryState.predictions[pIdx].collectedBy;
+  if (hasCredentials) {
+    if (!COLLECTIONS) {
+      return { success: false, status: 503, error: "Database not available" };
     }
-    targetPred = memoryState.predictions[pIdx];
-  }
-
-  if (isFirestoreAvailable && COLLECTIONS) {
     try {
-      const updates: any = { prizeCollected: collected };
-      if (collected) {
-        updates.prizeCollectedAt = nowIso;
-        updates.collectedBy = adminEmail;
-      } else {
-        updates.prizeCollectedAt = null;
-        updates.collectedBy = null;
+      const docRef = COLLECTIONS.predictions.doc(docId);
+      const snap = await docRef.get();
+      if (!snap.exists) {
+        return { success: false, status: 404, error: "Prediction not found." };
       }
-      await COLLECTIONS.predictions.doc(docId).set(updates, { merge: true });
-    } catch (err) {
-      isFirestoreAvailable = false;
+      const data = snap.data() as Prediction;
+      if (data.matchId !== matchId || !data.grandPrizeWinner) {
+        return { success: false, status: 404, error: "Prediction not eligible for prize collection: not a grand prize winner or does not match matchId." };
+      }
+
+      const updates: any = {
+        prizeCollected: collected,
+        collectedAt: collected ? nowIso : null,
+        prizeCollectedAt: collected ? nowIso : null,
+        collectedBy: collected ? adminEmail : null
+      };
+
+      // Use update() to never create a stub document
+      await docRef.update(updates);
+
+      const updatedPred: Prediction = {
+        ...data,
+        ...updates
+      };
+      if (!collected) {
+        delete updatedPred.collectedAt;
+        delete updatedPred.prizeCollectedAt;
+        delete updatedPred.collectedBy;
+      }
+
+      const pIdx = memoryState.predictions.findIndex(p => p.matchId === matchId && p.uid === uid);
+      if (pIdx >= 0) {
+        memoryState.predictions[pIdx] = updatedPred;
+      }
+
+      return { success: true, prediction: updatedPred };
+    } catch (err: any) {
       logFirestoreFallback("markPredictionPrizeCollected", err);
+      return { success: false, status: 503, error: "Failed to update prize status. Please try again." };
     }
   }
 
-  return { success: true, prediction: targetPred || undefined };
+  // Memory fallback only when no credentials exist
+  const pIdx = memoryState.predictions.findIndex(p => p.matchId === matchId && p.uid === uid);
+  if (pIdx < 0) {
+    return { success: false, status: 404, error: "Prediction not found." };
+  }
+
+  const pred = memoryState.predictions[pIdx];
+  if (pred.matchId !== matchId || !pred.grandPrizeWinner) {
+    return { success: false, status: 404, error: "Prediction not eligible for prize collection." };
+  }
+
+  pred.prizeCollected = collected;
+  if (collected) {
+    pred.collectedAt = nowIso;
+    pred.prizeCollectedAt = nowIso;
+    pred.collectedBy = adminEmail;
+  } else {
+    delete pred.collectedAt;
+    delete pred.prizeCollectedAt;
+    delete pred.collectedBy;
+  }
+
+  return { success: true, prediction: pred };
 }
 
 export async function verifyPredictionClaim(claimCodeOrDocId: string): Promise<{
   success: boolean;
+  status?: number;
   prediction?: Prediction;
   match?: PredictionMatch;
   error?: string;
@@ -1767,7 +2120,7 @@ export async function verifyPredictionClaim(claimCodeOrDocId: string): Promise<{
   getAdminDb();
   const cleanCode = (claimCodeOrDocId || "").trim();
   if (!cleanCode) {
-    return { success: false, error: "Please provide a valid claim reference code." };
+    return { success: false, status: 400, error: "Please provide a valid claim reference code." };
   }
 
   let prediction: Prediction | null = null;
@@ -1796,7 +2149,7 @@ export async function verifyPredictionClaim(claimCodeOrDocId: string): Promise<{
   }
 
   if (!prediction) {
-    return { success: false, error: `No prediction found matching reference code "${cleanCode}".` };
+    return { success: false, status: 404, error: `No prediction found matching reference code "${cleanCode}".` };
   }
 
   const match = await getPredictionMatch(prediction.matchId);
@@ -1806,21 +2159,22 @@ export async function verifyPredictionClaim(claimCodeOrDocId: string): Promise<{
 export async function redeemPredictionPrize(
   claimCodeOrDocId: string,
   adminEmail: string
-): Promise<{ success: boolean; prediction?: Prediction; error?: string }> {
+): Promise<{ success: boolean; status?: number; prediction?: Prediction; error?: string }> {
   const verify = await verifyPredictionClaim(claimCodeOrDocId);
   if (!verify.success || !verify.prediction) {
-    return { success: false, error: verify.error || "Prediction not found." };
+    return { success: false, status: verify.status || 404, error: verify.error || "Prediction not found." };
   }
 
   const pred = verify.prediction;
   if (!pred.grandPrizeWinner) {
-    return { success: false, error: "This prediction did not qualify for the grand prize (not all 3 legs were correct)." };
+    return { success: false, status: 400, error: "This prediction did not qualify for the grand prize (not all 3 legs were correct)." };
   }
 
   if (pred.prizeCollected) {
     const collectedDateStr = pred.prizeCollectedAt ? new Date(pred.prizeCollectedAt).toLocaleString() : "previously";
     return {
       success: false,
+      status: 409,
       error: `⚠️ Duplicate Claim Attempt: This prize was ALREADY claimed on ${collectedDateStr} (Redeemed by: ${pred.collectedBy || 'Staff'}). It cannot be redeemed twice.`
     };
   }

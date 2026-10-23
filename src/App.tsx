@@ -19,6 +19,7 @@ import OwnerDashboard from "./components/OwnerDashboard";
 import { AnimatedCounter } from "./components/AnimatedCounter";
 import BunaLogo from "./components/BunaLogo";
 import HattrickLogoModal from "./components/HattrickLogoModal";
+import HattrickHeroBanner from "./components/HattrickHeroBanner";
 import { LoyaltyProfile, AuthUser } from "./types";
 import { auth } from "./lib/firebase";
 import { onAuthStateChanged, signOut as fbSignOut } from "firebase/auth";
@@ -153,25 +154,32 @@ export default function App() {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
       if (fbUser) {
-        const email = (fbUser.email || "").toLowerCase().trim();
-        const isAdmin = email === "yared.abegaz@gmail.com";
-        const targetUsername = isAdmin ? "yared.abegaz@gmail.com" : (fbUser.displayName || email.split("@")[0] || "Coffee Explorer");
-
-        if (isAdmin) {
-          try {
-            const adminRes = await fetch("/api/owner/google-auth", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ email: "yared.abegaz@gmail.com", name: "yared.abegaz@gmail.com" })
-            });
-            const adminData = await adminRes.json();
-            if (adminData?.token) {
-              localStorage.setItem("buna_admin_token", adminData.token);
+        let isAdmin = false;
+        try {
+          const idToken = await fbUser.getIdToken();
+          const adminRes = await fetch("/api/owner/google-auth", {
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${idToken}`
             }
-          } catch (e) {
-            console.warn("Admin token sync error:", e);
+          });
+          if (adminRes.ok) {
+            const adminData = await adminRes.json();
+            if (adminData?.isAdmin && adminData?.token) {
+              isAdmin = true;
+              localStorage.setItem("buna_admin_token", adminData.token);
+            } else {
+              localStorage.removeItem("buna_admin_token");
+            }
+          } else {
+            localStorage.removeItem("buna_admin_token");
           }
+        } catch (e) {
+          console.warn("Admin token sync error:", e);
         }
+
+        const email = (fbUser.email || "").toLowerCase().trim();
+        const targetUsername = fbUser.displayName || (email ? email.split("@")[0] : "Coffee Explorer");
 
         const u: AuthUser = {
           role: isAdmin ? 'admin' : 'user',
@@ -340,16 +348,18 @@ export default function App() {
 
           {/* AUTHENTICATION CONTROLS & GOOGLE SIGN IN */}
           <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
-            {/* Brand Logo & Vector Asset Modal Trigger */}
-            <button
-              type="button"
-              onClick={() => setIsLogoModalOpen(true)}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 sm:px-3 sm:py-1.5 rounded-full bg-black/40 hover:bg-black/70 border border-amber-500/40 text-amber-300 text-xs font-semibold transition-all shadow-sm cursor-pointer shrink-0"
-              title="View & Download Official Hattrick Coffee Vector Logo"
-            >
-              <Sparkles size={13} className="text-amber-400 animate-pulse" />
-              <span className="text-[11px] sm:text-xs">Logo Asset</span>
-            </button>
+            {/* Brand Logo & Vector Asset Modal Trigger - ONLY VISIBLE IN ADMIN ACCOUNT */}
+            {authUser.role === 'admin' && (
+              <button
+                type="button"
+                onClick={() => setIsLogoModalOpen(true)}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 sm:px-3 sm:py-1.5 rounded-full bg-black/60 hover:bg-black/80 border border-amber-500/50 text-amber-300 text-xs font-semibold transition-all shadow-sm cursor-pointer shrink-0"
+                title="Admin: View & Download Official Hattrick Coffee Brand Assets"
+              >
+                <Sparkles size={13} className="text-amber-400 animate-pulse" />
+                <span className="text-[11px] sm:text-xs">Logo Asset</span>
+              </button>
+            )}
 
             {/* Mobile "All Menus" trigger button right in header */}
             <button
@@ -616,72 +626,13 @@ export default function App() {
 
           <div className="relative max-w-7xl mx-auto z-10">
             
-            {/* Main 2-Column Responsive Grid */}
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 items-center">
-              
-              {/* LEFT COLUMN: HERO TYPOGRAPHY & BRANDING */}
-              <div className="lg:col-span-7 flex flex-col items-center lg:items-start text-center lg:text-left">
-                
-                {/* Heritage & Football Badge */}
-                <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-[#224e38] border border-[#2d824d]/40 shadow-sm mb-6">
-                  <span className="text-sm">🇪🇹</span>
-                  <span className="text-xs">⚽</span>
-                  <span className="text-[11px] font-mono text-[#42bd6c] uppercase tracking-widest font-semibold">
-                    The Ritual of Buna & Match Day
-                  </span>
-                </div>
-
-                {/* Main Titles */}
-                <h1 className="text-6xl sm:text-7xl lg:text-8xl font-serif-heritage font-black tracking-tight text-white mb-2 leading-none">
-                  BUNA
-                </h1>
-                
-                <h2 className="text-2xl sm:text-3xl lg:text-4xl font-serif-display italic font-medium text-[#42bd6c] mb-6 tracking-wide">
-                  Where Specialty Coffee Meets the Pitch
-                </h2>
-
-                <p className="text-sm sm:text-base text-stone-300 leading-relaxed font-sans font-light tracking-wide max-w-2xl mb-8">
-                  From traditional clay Jebena roasts in Addis Ababa to the roaring drama of weekend football. Sip single-origin Ethiopian coffees, stamp your origin passport across Sidama and Yirgacheffe, and enter the free weekly 3-leg prediction challenge to win artisanal beans.
-                </p>
-
-                {/* Primary Action Buttons */}
-                <div className="flex flex-wrap items-center justify-center lg:justify-start gap-4">
-                  <button
-                    onClick={() => handleTabClick("prize")}
-                    className="px-6 py-3.5 rounded-2xl bg-gradient-to-r from-[#2d824d] via-[#42bd6c] to-[#2d824d] hover:from-[#226a3f] hover:to-[#226a3f] text-white font-bold text-sm transition-all shadow-lg shadow-[#2d824d]/30 hover:scale-[1.02] active:scale-[0.98] flex items-center gap-2.5 cursor-pointer"
-                  >
-                    <Trophy size={18} />
-                    <span>Predict & Win Grand Prize</span>
-                  </button>
-
-                  <button
-                    onClick={() => handleTabClick("map")}
-                    className="px-6 py-3.5 rounded-2xl bg-[#224e38] hover:bg-[#295a3d] border border-[#295a3d] text-white font-semibold text-sm transition-all flex items-center gap-2 shadow-sm cursor-pointer"
-                  >
-                    <span>🗺</span>
-                    <span>Explore Terroir Map</span>
-                  </button>
-                </div>
-
-              </div>
-
-              {/* RIGHT COLUMN: HIGH-FIDELITY COFFEE CUP GRAPHIC WITH PITCH-LINE SEAMS */}
-              <div className="lg:col-span-5 relative flex items-center justify-center pt-6 lg:pt-0">
-                {/* Slow Zoom Atmospheric Background Layer */}
-                <motion.div
-                  initial={{ scale: 1, rotate: 0 }}
-                  animate={{ scale: [1, 1.15, 1.05, 1], rotate: [0, 3, -3, 0], x: [0, 8, -8, 0] }}
-                  transition={{ duration: 25, repeat: Infinity, repeatType: "mirror", ease: "easeInOut" }}
-                  className="absolute inset-0 bg-gradient-to-tr from-[#2d824d]/30 via-emerald-800/20 to-transparent blur-3xl rounded-full scale-95 pointer-events-none"
-                />
-                
-                {/* Coffee Cup Container with Subtle Ball Geometry Overlay */}
-                <div className="relative w-full max-w-[380px] sm:max-w-[440px] aspect-square flex items-center justify-center">
-                  <CoffeeCupSVG />
-                </div>
-              </div>
-
-            </div>
+            {/* MODERN ENERGETIC HERO BANNER GRAPHIC: DSTV + COFFEE x HATTRICK COFFEE */}
+            <HattrickHeroBanner
+              isAdmin={authUser.role === 'admin'}
+              onPredictClick={() => handleTabClick("prize")}
+              onExploreMapClick={() => handleTabClick("map")}
+              onOpenLogoModal={() => setIsLogoModalOpen(true)}
+            />
 
             {/* UNIFIED HERO STATS CARDS DASHBOARD (MOBILE-FIRST RESPONSIVE GRID) */}
             <div className="grid grid-cols-1 min-[420px]:grid-cols-2 md:grid-cols-4 gap-4 sm:gap-5 mt-12 pt-8 border-t border-[#295a3d]">
@@ -910,11 +861,13 @@ export default function App() {
         deviceId={getDeviceId()}
       />
 
-      {/* HATTRICK COFFEE OFFICIAL LOGO & VECTOR ASSET MODAL */}
-      <HattrickLogoModal
-        isOpen={isLogoModalOpen}
-        onClose={() => setIsLogoModalOpen(false)}
-      />
+      {/* HATTRICK COFFEE OFFICIAL LOGO & VECTOR ASSET MODAL - ADMIN ONLY */}
+      {authUser.role === 'admin' && (
+        <HattrickLogoModal
+          isOpen={isLogoModalOpen}
+          onClose={() => setIsLogoModalOpen(false)}
+        />
+      )}
 
     </div>
   );

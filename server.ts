@@ -51,6 +51,11 @@ app.get("/api/ethiopia/regions", (req, res) => {
   res.json(ethiopianRegions);
 });
 
+// 404 for unknown /api/* routes
+app.all("/api/*", (req, res) => {
+  res.status(404).json({ error: "Not found" });
+});
+
 // Server Initialization
 const startServer = async () => {
   if (process.env.NODE_ENV !== "production") {

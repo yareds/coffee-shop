@@ -57,25 +57,33 @@ export default function LoginModal({
 
   const handleSuccessfulAuth = async (fbUser: any, displayNameOverride?: string) => {
     const userEmail = (fbUser.email || "").toLowerCase().trim();
-    const isAdmin = userEmail === "yared.abegaz@gmail.com";
-    const targetUsername = displayNameOverride || fbUser.displayName || userEmail.split("@")[0] || "Coffee Explorer";
+    let isAdmin = false;
 
-    // If admin, obtain admin token
-    if (isAdmin) {
-      try {
-        const adminRes = await fetch("/api/owner/google-auth", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email: "yared.abegaz@gmail.com", name: "yared.abegaz@gmail.com" })
-        });
-        const adminData = await adminRes.json();
-        if (adminData?.token) {
-          localStorage.setItem("buna_admin_token", adminData.token);
+    // Verify admin token securely via Firebase ID token
+    try {
+      const idToken = await fbUser.getIdToken();
+      const adminRes = await fetch("/api/owner/google-auth", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${idToken}`
         }
-      } catch (e) {
-        console.warn("Admin token fetch error:", e);
+      });
+      if (adminRes.ok) {
+        const adminData = await adminRes.json();
+        if (adminData?.isAdmin && adminData?.token) {
+          isAdmin = true;
+          localStorage.setItem("buna_admin_token", adminData.token);
+        } else {
+          localStorage.removeItem("buna_admin_token");
+        }
+      } else {
+        localStorage.removeItem("buna_admin_token");
       }
+    } catch (e) {
+      console.warn("Admin token verification error:", e);
     }
+
+    const targetUsername = displayNameOverride || fbUser.displayName || (userEmail ? userEmail.split("@")[0] : "Coffee Explorer");
 
     // Sync user profile to Firestore
     try {

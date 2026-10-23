@@ -2,10 +2,11 @@ import React, { useState, useEffect } from "react";
 import { 
   Shield, Sparkles, RefreshCw, CheckCircle2, TrendingUp, Users, Tag, Award, 
   Plus, Trash2, Eye, EyeOff, Trophy, Calendar, AlertTriangle, Check, X, Clock,
-  Filter, Search, QrCode, FileText, History, ArrowRight
+  Filter, Search, QrCode, FileText, History, ArrowRight, Download, Layers, Image as ImageIcon
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { MatchAuditEntry } from "../types";
+import HattrickLogoModal from "./HattrickLogoModal";
 
 interface MatchPlayer {
   name: string;
@@ -17,7 +18,8 @@ export default function OwnerDashboard() {
   const [users, setUsers] = useState<any[]>([]);
   const [matches, setMatches] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeSubTab, setActiveSubTab] = useState<'overview' | 'promotions' | 'predictions' | 'users'>('predictions');
+  const [activeSubTab, setActiveSubTab] = useState<'overview' | 'promotions' | 'predictions' | 'users' | 'brand_assets'>('predictions');
+  const [isAssetModalOpen, setIsAssetModalOpen] = useState(false);
   
   // Predictions sub-view: "matches" | "customer_predictions" | "verify_claim"
   const [predictionView, setPredictionView] = useState<'matches' | 'customer_predictions' | 'verify_claim'>('matches');
@@ -66,14 +68,109 @@ export default function OwnerDashboard() {
   const [expandedAuditMatchId, setExpandedAuditMatchId] = useState<string | null>(null);
   const [actionMsg, setActionMsg] = useState<string | null>(null);
 
+  // Entries table state per match
+  const [expandedEntriesMatchId, setExpandedEntriesMatchId] = useState<string | null>(null);
+  const [entriesCache, setEntriesCache] = useState<Record<string, any[]>>({});
+  const [loadingEntries, setLoadingEntries] = useState<Record<string, boolean>>({});
+  const [entriesSearch, setEntriesSearch] = useState<Record<string, string>>({});
+  const [entriesSortKey, setEntriesSortKey] = useState<string>("submittedAt");
+  const [entriesSortDir, setEntriesSortDir] = useState<"asc" | "desc">("desc");
+
+  const loadMatchEntries = async (matchId: string) => {
+    setLoadingEntries(prev => ({ ...prev, [matchId]: true }));
+    try {
+      const res = await fetch(`/api/owner/predictions/entries?matchId=${matchId}`, {
+        headers: getAdminHeaders()
+      });
+      const data = await res.json();
+      if (data.success && Array.isArray(data.entries)) {
+        setEntriesCache(prev => ({ ...prev, [matchId]: data.entries }));
+      }
+    } catch (e) {
+      console.error("Failed to load match entries:", e);
+    } finally {
+      setLoadingEntries(prev => ({ ...prev, [matchId]: false }));
+    }
+  };
+
+  const toggleViewEntries = (matchId: string) => {
+    if (expandedEntriesMatchId === matchId) {
+      setExpandedEntriesMatchId(null);
+    } else {
+      setExpandedEntriesMatchId(matchId);
+      if (!entriesCache[matchId]) {
+        loadMatchEntries(matchId);
+      }
+    }
+  };
+
+  const downloadEntriesCsv = (m: any, entriesList: any[]) => {
+    const headers = [
+      "Customer Name",
+      "Email",
+      "Outcome (L1)",
+      "Scoreline (L2)",
+      "Player (L3)",
+      "Player Goals",
+      "Submitted At",
+      "Leg 1 Correct",
+      "Leg 2 Correct",
+      "Leg 3 Correct",
+      "Legs Correct",
+      "Grand Prize Winner",
+      "Prize Collected",
+      "Collected At",
+      "Claim Code"
+    ];
+
+    const rows = entriesList.map(e => [
+      `"${(e.displayName || '').replace(/"/g, '""')}"`,
+      `"${(e.email || '').replace(/"/g, '""')}"`,
+      e.outcome || '',
+      `"${e.scoreline || ''}"`,
+      `"${(e.playerName || '').replace(/"/g, '""')}"`,
+      e.playerGoals ?? '',
+      e.submittedAt || '',
+      e.leg1Correct !== undefined ? (e.leg1Correct ? "YES" : "NO") : "",
+      e.leg2Correct !== undefined ? (e.leg2Correct ? "YES" : "NO") : "",
+      e.leg3Correct !== undefined ? (e.leg3Correct ? "YES" : "NO") : "",
+      e.legsCorrect ?? '',
+      e.grandPrizeWinner !== undefined ? (e.grandPrizeWinner ? "YES" : "NO") : "",
+      e.prizeCollected !== undefined ? (e.prizeCollected ? "YES" : "NO") : "",
+      e.collectedAt ? `"${new Date(e.collectedAt).toLocaleString()}"` : '',
+      e.claimCode || ''
+    ]);
+
+    const csvContent = [headers.join(","), ...rows.map(r => r.join(","))].join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.setAttribute("download", `entries_${m.homeTeam}_vs_${m.awayTeam}_${m.id}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
   const getAdminHeaders = () => {
     const token = localStorage.getItem("buna_admin_token") || "";
     const pin = localStorage.getItem("buna_admin_pin") || "";
+    let email = "";
+    try {
+      const stored = localStorage.getItem("buna_auth_user");
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        email = parsed.email || "";
+      }
+    } catch {
+      // ignore
+    }
     return {
       "Content-Type": "application/json",
       "X-Admin-Token": token,
       "X-Admin-Pin": pin,
-      "X-Admin-Email": "yared.abegaz@gmail.com"
+      ...(email ? { "X-Admin-Email": email } : {})
     };
   };
 
@@ -315,7 +412,12 @@ export default function OwnerDashboard() {
       });
   };
 
-  const handleTogglePrizeCollected = (matchId: string, uid: string, current: boolean) => {
+  const handleTogglePrizeCollected = (matchId: string, uid: string, current: boolean, winnerName?: string, winnerEmail?: string) => {
+    const actionText = !current ? "mark prize as collected" : "revert prize collected status";
+    const userLabel = winnerName ? ` for ${winnerName}${winnerEmail ? ` (${winnerEmail})` : ""}` : "";
+    if (!window.confirm(`Are you sure you want to ${actionText}${userLabel}?`)) {
+      return;
+    }
     fetch("/api/owner/predictions/collect-prize", {
       method: "POST",
       headers: getAdminHeaders(),
@@ -327,6 +429,9 @@ export default function OwnerDashboard() {
           showFeedback("Prize collected status updated.");
           loadDashboardData();
           if (predictionView === "customer_predictions") loadAllPredictions();
+          loadMatchEntries(matchId);
+        } else {
+          showFeedback(data.error || "Failed to update prize status.");
         }
       })
       .catch(e => console.error(e));
@@ -441,6 +546,19 @@ export default function OwnerDashboard() {
           >
             <Users size={14} />
             <span>Customer Accounts</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveSubTab('brand_assets')}
+            className={`px-3 py-1.5 rounded-xl font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+              activeSubTab === 'brand_assets'
+                ? 'bg-amber-400 text-stone-950 shadow-md font-black'
+                : 'bg-[#122b1c] text-amber-300 border border-amber-500/40'
+            }`}
+          >
+            <Sparkles size={14} />
+            <span>Brand & Logo Assets</span>
           </button>
         </div>
       </div>
@@ -797,6 +915,19 @@ export default function OwnerDashboard() {
                         </div>
 
                         <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => toggleViewEntries(m.id)}
+                            className={`px-3 py-1 rounded-lg text-xs font-medium cursor-pointer flex items-center gap-1.5 transition-all ${
+                              expandedEntriesMatchId === m.id
+                                ? "bg-emerald-500 text-stone-950 font-bold"
+                                : "bg-[#224e38] hover:bg-[#295a3d] text-stone-200"
+                            }`}
+                          >
+                            <Users size={13} />
+                            <span>Entries ({m.stats?.totalEntries || 0})</span>
+                          </button>
+
                           {m.status === "scheduled" && (
                             <>
                               <button
@@ -899,33 +1030,268 @@ export default function OwnerDashboard() {
                         </div>
                       )}
 
-                      {/* Winners List with Claim Status Toggle */}
+                      {/* Winners List with Full Name + Email, 6-character Claim Code, Confirm Dialog, and Collected Date */}
                       {m.winners && m.winners.length > 0 && (
                         <div className="pt-2 border-t border-[#295a3d] flex flex-col gap-2">
-                          <span className="text-[11px] font-bold text-amber-300 font-mono">🏆 Grand Prize Winners:</span>
+                          <span className="text-[11px] font-bold text-amber-300 font-mono">🏆 Grand Prize Winners ({m.winners.length}):</span>
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                             {m.winners.map((w: any) => (
-                              <div key={w.uid} className="p-2.5 rounded-lg bg-[#1a3e29] border border-[#295a3d] flex items-center justify-between text-xs">
-                                <div>
-                                  <span className="text-white font-semibold block">{w.displayName}</span>
-                                  {w.claimCode && (
-                                    <span className="text-[10px] font-mono text-amber-300">Ref: {w.claimCode}</span>
+                              <div key={w.uid} className="p-3 rounded-xl bg-[#1a3e29] border border-[#295a3d] flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+                                <div className="min-w-0">
+                                  <span className="text-white font-bold block truncate">{w.displayName}</span>
+                                  {w.email && (
+                                    <span className="text-stone-300 text-[11px] font-mono block truncate">{w.email}</span>
                                   )}
+                                  <div className="flex flex-wrap items-center gap-2 mt-1">
+                                    {w.claimCode && (
+                                      <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-stone-950 text-amber-300 font-bold border border-amber-500/30">
+                                        Claim Code: {w.claimCode}
+                                      </span>
+                                    )}
+                                    {w.prizeCollected && (w.collectedAt || w.prizeCollectedAt) && (
+                                      <span className="text-[10px] font-mono text-emerald-400">
+                                        Collected on {new Date(w.collectedAt || w.prizeCollectedAt).toLocaleDateString()}
+                                      </span>
+                                    )}
+                                  </div>
                                 </div>
                                 <button
                                   type="button"
-                                  onClick={() => handleTogglePrizeCollected(m.id, w.uid, w.prizeCollected)}
-                                  className={`px-2.5 py-1 rounded text-[10px] font-mono font-bold cursor-pointer ${
+                                  onClick={() => handleTogglePrizeCollected(m.id, w.uid, w.prizeCollected, w.displayName, w.email)}
+                                  className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold cursor-pointer shrink-0 transition-all ${
                                     w.prizeCollected
-                                      ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/40"
-                                      : "bg-amber-500/20 text-amber-300 border border-amber-500/40"
+                                      ? "bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/50"
+                                      : "bg-amber-400 hover:bg-amber-300 text-stone-950 font-black shadow-sm"
                                   }`}
                                 >
-                                  {w.prizeCollected ? "✓ Redeemed" : "Mark Redeemed"}
+                                  {w.prizeCollected ? "✓ Collected" : "Mark Prize Collected"}
                                 </button>
                               </div>
                             ))}
                           </div>
+                        </div>
+                      )}
+
+                      {/* Expandable Entries Table */}
+                      {expandedEntriesMatchId === m.id && (
+                        <div className="pt-3 border-t border-[#295a3d] flex flex-col gap-3">
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-[#1a3e29] p-3 rounded-xl border border-[#295a3d]">
+                            <div className="flex items-center gap-2">
+                              <Users size={16} className="text-emerald-400" />
+                              <span className="text-xs font-bold font-mono text-white">
+                                Entries Table ({(() => {
+                                  const list = entriesCache[m.id] || [];
+                                  const search = (entriesSearch[m.id] || "").toLowerCase().trim();
+                                  const filtered = search
+                                    ? list.filter(e => (e.displayName || "").toLowerCase().includes(search) || (e.email || "").toLowerCase().includes(search))
+                                    : list;
+                                  return `${filtered.length} of ${list.length}`;
+                                })()})
+                              </span>
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                              <div className="relative">
+                                <Search size={13} className="absolute left-2.5 top-2 text-stone-400" />
+                                <input
+                                  type="text"
+                                  placeholder="Search name or email..."
+                                  value={entriesSearch[m.id] || ""}
+                                  onChange={e => setEntriesSearch(prev => ({ ...prev, [m.id]: e.target.value }))}
+                                  className="pl-8 pr-3 py-1.5 rounded-lg bg-[#122b1c] border border-[#295a3d] text-xs text-white placeholder:text-stone-500 w-48"
+                                />
+                              </div>
+
+                              <button
+                                type="button"
+                                onClick={() => downloadEntriesCsv(m, entriesCache[m.id] || [])}
+                                disabled={!entriesCache[m.id] || entriesCache[m.id].length === 0}
+                                className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-stone-950 font-bold text-xs cursor-pointer flex items-center gap-1.5 transition-all"
+                              >
+                                <Download size={13} />
+                                <span>Download CSV</span>
+                              </button>
+                            </div>
+                          </div>
+
+                          {loadingEntries[m.id] ? (
+                            <div className="p-6 text-center text-xs font-mono text-stone-400">
+                              Loading entries for this fixture...
+                            </div>
+                          ) : !entriesCache[m.id] || entriesCache[m.id].length === 0 ? (
+                            <div className="p-4 text-center text-xs font-mono text-stone-400 bg-[#1a3e29] rounded-xl border border-[#295a3d]">
+                              No predictions submitted for this match yet.
+                            </div>
+                          ) : (
+                            <div className="overflow-x-auto rounded-xl border border-[#295a3d] bg-[#143320]">
+                              <table className="w-full text-left text-xs font-mono border-collapse">
+                                <thead>
+                                  <tr className="bg-[#1a3e29] text-stone-300 border-b border-[#295a3d]">
+                                    <th
+                                      className="p-2.5 cursor-pointer hover:text-white"
+                                      onClick={() => {
+                                        setEntriesSortKey("displayName");
+                                        setEntriesSortDir(prev => (prev === "asc" ? "desc" : "asc"));
+                                      }}
+                                    >
+                                      Entrant {entriesSortKey === "displayName" ? (entriesSortDir === "asc" ? "▲" : "▼") : ""}
+                                    </th>
+                                    <th
+                                      className="p-2.5 cursor-pointer hover:text-white"
+                                      onClick={() => {
+                                        setEntriesSortKey("email");
+                                        setEntriesSortDir(prev => (prev === "asc" ? "desc" : "asc"));
+                                      }}
+                                    >
+                                      Email {entriesSortKey === "email" ? (entriesSortDir === "asc" ? "▲" : "▼") : ""}
+                                    </th>
+                                    <th className="p-2.5">Outcome (L1)</th>
+                                    <th className="p-2.5">Score (L2)</th>
+                                    <th className="p-2.5">Player (L3)</th>
+                                    {m.status === "settled" && (
+                                      <>
+                                        <th className="p-2.5">Legs Result</th>
+                                        <th
+                                          className="p-2.5 cursor-pointer hover:text-white"
+                                          onClick={() => {
+                                            setEntriesSortKey("legsCorrect");
+                                            setEntriesSortDir(prev => (prev === "asc" ? "desc" : "asc"));
+                                          }}
+                                        >
+                                          Score {entriesSortKey === "legsCorrect" ? (entriesSortDir === "asc" ? "▲" : "▼") : ""}
+                                        </th>
+                                        <th className="p-2.5">Grand Prize</th>
+                                      </>
+                                    )}
+                                    <th
+                                      className="p-2.5 cursor-pointer hover:text-white"
+                                      onClick={() => {
+                                        setEntriesSortKey("submittedAt");
+                                        setEntriesSortDir(prev => (prev === "asc" ? "desc" : "asc"));
+                                      }}
+                                    >
+                                      Submitted {entriesSortKey === "submittedAt" ? (entriesSortDir === "asc" ? "▲" : "▼") : ""}
+                                    </th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {(() => {
+                                    const search = (entriesSearch[m.id] || "").toLowerCase().trim();
+                                    let list = [...(entriesCache[m.id] || [])];
+                                    if (search) {
+                                      list = list.filter(e =>
+                                        (e.displayName || "").toLowerCase().includes(search) ||
+                                        (e.email || "").toLowerCase().includes(search)
+                                      );
+                                    }
+                                    list.sort((a, b) => {
+                                      let valA = a[entriesSortKey];
+                                      let valB = b[entriesSortKey];
+                                      if (entriesSortKey === "submittedAt") {
+                                        valA = new Date(valA || 0).getTime();
+                                        valB = new Date(valB || 0).getTime();
+                                      }
+                                      if (valA < valB) return entriesSortDir === "asc" ? -1 : 1;
+                                      if (valA > valB) return entriesSortDir === "asc" ? 1 : -1;
+                                      return 0;
+                                    });
+
+                                    return list.map((entry, idx) => {
+                                      const isWinner = Boolean(entry.grandPrizeWinner);
+                                      return (
+                                        <tr
+                                          key={entry.uid || idx}
+                                          className={`border-b border-[#295a3d]/60 transition-colors ${
+                                            isWinner
+                                              ? "bg-amber-500/15 border-amber-500/50 text-white font-semibold"
+                                              : idx % 2 === 0
+                                              ? "bg-transparent text-stone-200"
+                                              : "bg-[#122b1c]/40 text-stone-300"
+                                          }`}
+                                        >
+                                          <td className="p-2.5">
+                                            <span className="font-bold text-white block">{entry.displayName}</span>
+                                            {isWinner && (
+                                              <span className="text-[10px] text-amber-300 font-bold uppercase block">
+                                                🏆 Winner • Ref: {entry.claimCode}
+                                              </span>
+                                            )}
+                                          </td>
+                                          <td className="p-2.5 text-stone-300">
+                                            {entry.email || "—"}
+                                          </td>
+                                          <td className="p-2.5">
+                                            <span className="px-2 py-0.5 rounded bg-[#1a3e29] border border-[#295a3d] text-[11px] font-bold">
+                                              {entry.outcome}
+                                            </span>
+                                          </td>
+                                          <td className="p-2.5">
+                                            <span className="font-mono text-emerald-400 font-bold">
+                                              {entry.scoreline}
+                                            </span>
+                                          </td>
+                                          <td className="p-2.5">
+                                            <span className="text-white block truncate max-w-[140px]">
+                                              {entry.playerName} ({entry.playerGoals})
+                                            </span>
+                                          </td>
+                                          {m.status === "settled" && (
+                                            <>
+                                              <td className="p-2.5">
+                                                <div className="flex items-center gap-1.5 text-[11px]">
+                                                  <span className={entry.leg1Correct ? "text-emerald-400 font-bold" : "text-stone-500"}>
+                                                    L1:{entry.leg1Correct ? "✓" : "✗"}
+                                                  </span>
+                                                  <span>•</span>
+                                                  <span className={entry.leg2Correct ? "text-emerald-400 font-bold" : "text-stone-500"}>
+                                                    L2:{entry.leg2Correct ? "✓" : "✗"}
+                                                  </span>
+                                                  <span>•</span>
+                                                  <span className={entry.leg3Correct ? "text-emerald-400 font-bold" : "text-stone-500"}>
+                                                    L3:{entry.leg3Correct ? "✓" : "✗"}
+                                                  </span>
+                                                </div>
+                                              </td>
+                                              <td className="p-2.5">
+                                                <span className={`px-2 py-0.5 rounded text-[11px] font-bold ${
+                                                  isWinner ? "bg-amber-400 text-stone-950" : "bg-[#1a3e29] text-stone-300"
+                                                }`}>
+                                                  {entry.legsCorrect ?? 0}/3
+                                                </span>
+                                              </td>
+                                              <td className="p-2.5">
+                                                {isWinner ? (
+                                                  <div className="flex flex-col gap-0.5">
+                                                    <span className="px-2 py-0.5 rounded bg-amber-400 text-stone-950 font-black text-[10px] uppercase inline-block w-fit">
+                                                      Grand Prize
+                                                    </span>
+                                                    {entry.prizeCollected ? (
+                                                      <span className="text-[10px] text-emerald-400 font-mono">
+                                                        Collected {entry.collectedAt ? new Date(entry.collectedAt).toLocaleDateString() : ""}
+                                                      </span>
+                                                    ) : (
+                                                      <span className="text-[10px] text-amber-300 font-mono">
+                                                        Unclaimed
+                                                      </span>
+                                                    )}
+                                                  </div>
+                                                ) : (
+                                                  <span className="text-stone-500">—</span>
+                                                )}
+                                              </td>
+                                            </>
+                                          )}
+                                          <td className="p-2.5 text-[11px] text-stone-400">
+                                            {entry.submittedAt ? new Date(entry.submittedAt).toLocaleDateString() : "—"}
+                                          </td>
+                                        </tr>
+                                      );
+                                    });
+                                  })()}
+                                </tbody>
+                              </table>
+                            </div>
+                          )}
                         </div>
                       )}
 
@@ -1283,6 +1649,236 @@ export default function OwnerDashboard() {
           </div>
         </div>
       )}
+
+      {/* ======================================================== */}
+      {/* SECTION: BRAND & LOGO ASSETS (ADMIN ONLY)                */}
+      {/* ======================================================== */}
+      {activeSubTab === 'brand_assets' && (
+        <div className="flex flex-col gap-6">
+          <div className="bg-[#1a3e29] p-6 rounded-2xl border border-[#295a3d] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <span className="px-2.5 py-0.5 rounded-full bg-amber-400/20 text-amber-300 border border-amber-400/40 text-[10px] font-mono font-bold uppercase">
+                  CONFIDENTIAL ADMIN ASSETS
+                </span>
+                <span className="text-xs font-mono text-stone-300">Brand Identity Suite</span>
+              </div>
+              <h3 className="text-xl font-bold font-serif-display text-white">
+                Hattrick Coffee • Official Brand & Graphic Assets
+              </h3>
+              <p className="text-xs text-stone-300 mt-0.5 max-w-xl leading-relaxed">
+                High-resolution logos, transparent PNG cutouts, 16:9 cinematic banners, and vector SVGs for merchandise, signage, and social media.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setIsAssetModalOpen(true)}
+              className="px-4 py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-stone-950 font-black text-xs transition-all shadow-lg shadow-amber-400/20 flex items-center gap-2 cursor-pointer shrink-0"
+            >
+              <Sparkles size={15} />
+              <span>Launch Asset Suite Modal</span>
+            </button>
+          </div>
+
+          {/* Grid of Brand Assets */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+            
+            {/* Card 1: 16:9 Hero Graphic Banner */}
+            <div className="bg-[#122b1c] rounded-2xl border border-[#295a3d] p-4 flex flex-col justify-between">
+              <div>
+                <div className="w-full aspect-[16/9] rounded-xl overflow-hidden bg-black border border-cyan-500/30 mb-3 flex items-center justify-center">
+                  <img
+                    src="/assets/aistudio/image_74f28168.png"
+                    alt="Realistic Hero Banner"
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+                <div className="flex items-center justify-between">
+                  <h4 className="font-bold text-white text-sm">Realistic Hero Banner</h4>
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-800">
+                    1376×768 PNG
+                  </span>
+                </div>
+                <p className="text-xs text-stone-300 mt-1 leading-relaxed">
+                  Cinematic night stadium artwork featuring the realistic human soccer player kicking the coffee-ball, DSTV + COFFEE headline, and Amharic script.
+                </p>
+              </div>
+
+              <a
+                href="/assets/aistudio/image_74f28168.png"
+                download="hattrick-coffee-dstv-hero-banner.png"
+                className="mt-4 w-full py-2 px-3 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-stone-950 text-xs font-bold flex items-center justify-center gap-2 transition-colors"
+              >
+                <Download size={14} />
+                <span>Download Banner PNG</span>
+              </a>
+            </div>
+
+            {/* Card 2: Transparent Coffee-Ball Emblem */}
+            <div className="bg-[#122b1c] rounded-2xl border border-[#295a3d] p-4 flex flex-col justify-between">
+              <div>
+                <div className="w-full aspect-square max-h-48 rounded-xl overflow-hidden bg-black/40 border border-amber-500/30 mb-3 flex items-center justify-center p-3">
+                  <img
+                    src="/assets/aistudio/hattrick_emblem_cropped.png"
+                    alt="Transparent Emblem"
+                    className="max-h-full w-auto object-contain filter drop-shadow-md"
+                  />
+                </div>
+                <div className="flex items-center justify-between">
+                  <h4 className="font-bold text-white text-sm">Transparent Emblem</h4>
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-950 text-amber-300 border border-amber-800">
+                    Transparent PNG
+                  </span>
+                </div>
+                <p className="text-xs text-stone-300 mt-1 leading-relaxed">
+                  Sub-pixel anti-aliased cutout of the coffee bean soccer ball with gold beveled rim, ready for embroidery and dark/light placement.
+                </p>
+              </div>
+
+              <a
+                href="/assets/aistudio/hattrick_emblem_cropped.png"
+                download="hattrick-coffee-emblem-transparent.png"
+                className="mt-4 w-full py-2 px-3 rounded-xl bg-amber-400 hover:bg-amber-300 text-stone-950 text-xs font-bold flex items-center justify-center gap-2 transition-colors"
+              >
+                <Download size={14} />
+                <span>Download Transparent PNG</span>
+              </a>
+            </div>
+
+            {/* Card 3: Official Master Emblem JPG */}
+            <div className="bg-[#122b1c] rounded-2xl border border-[#295a3d] p-4 flex flex-col justify-between">
+              <div>
+                <div className="w-full aspect-square max-h-48 rounded-xl overflow-hidden bg-stone-100 border border-stone-300 mb-3 flex items-center justify-center p-3">
+                  <img
+                    src="/assets/aistudio/logo_714966a9.jpg"
+                    alt="Master JPG Emblem"
+                    className="max-h-full w-auto object-contain"
+                  />
+                </div>
+                <div className="flex items-center justify-between">
+                  <h4 className="font-bold text-white text-sm">Master Emblem JPG</h4>
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-stone-800 text-stone-300 border border-stone-700">
+                    Original JPG
+                  </span>
+                </div>
+                <p className="text-xs text-stone-300 mt-1 leading-relaxed">
+                  The unedited master ball-and-coffee emblem asset with cream texture background and full-depth shading.
+                </p>
+              </div>
+
+              <a
+                href="/assets/aistudio/logo_714966a9.jpg"
+                download="hattrick-coffee-emblem-original.jpg"
+                className="mt-4 w-full py-2 px-3 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-200 text-xs font-bold flex items-center justify-center gap-2 transition-colors border border-stone-700"
+              >
+                <Download size={14} />
+                <span>Download Master JPG</span>
+              </a>
+            </div>
+
+            {/* Card 4: Horizontal Logo Lockup */}
+            <div className="bg-[#122b1c] rounded-2xl border border-[#295a3d] p-4 flex flex-col justify-between">
+              <div>
+                <div className="w-full aspect-[16/9] rounded-xl overflow-hidden bg-[#faf7f2] border border-stone-300 mb-3 flex items-center justify-center p-3">
+                  <img
+                    src="/assets/aistudio/image_6c7db08c.png"
+                    alt="Horizontal Logo Lockup"
+                    className="max-h-full w-auto object-contain"
+                  />
+                </div>
+                <div className="flex items-center justify-between">
+                  <h4 className="font-bold text-white text-sm">Horizontal Lockup</h4>
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-stone-800 text-stone-300 border border-stone-700">
+                    Original PNG
+                  </span>
+                </div>
+                <p className="text-xs text-stone-300 mt-1 leading-relaxed">
+                  Full corporate horizontal lockup with emblem, bold uppercase title, Amharic script, and Hawassa, Ethiopia location.
+                </p>
+              </div>
+
+              <a
+                href="/assets/aistudio/image_6c7db08c.png"
+                download="hattrick-coffee-full-lockup.png"
+                className="mt-4 w-full py-2 px-3 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-200 text-xs font-bold flex items-center justify-center gap-2 transition-colors border border-stone-700"
+              >
+                <Download size={14} />
+                <span>Download Full Lockup</span>
+              </a>
+            </div>
+
+            {/* Card 5: Scalable Vector SVG (Light) */}
+            <div className="bg-[#122b1c] rounded-2xl border border-[#295a3d] p-4 flex flex-col justify-between">
+              <div>
+                <div className="w-full aspect-[16/9] rounded-xl overflow-hidden bg-[#faf7f2] border border-stone-300 mb-3 flex items-center justify-center p-3">
+                  <img
+                    src="/hattrick-coffee-logo.svg"
+                    alt="Light Vector SVG"
+                    className="max-h-full w-full object-contain"
+                  />
+                </div>
+                <div className="flex items-center justify-between">
+                  <h4 className="font-bold text-white text-sm">Scalable SVG (Light)</h4>
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800">
+                    Vector SVG
+                  </span>
+                </div>
+                <p className="text-xs text-stone-300 mt-1 leading-relaxed">
+                  Infinite resolution math vector file for Adobe Illustrator, CorelDraw, Figma, billboard printing, and laser engraving.
+                </p>
+              </div>
+
+              <a
+                href="/hattrick-coffee-logo.svg"
+                download="hattrick-coffee-logo.svg"
+                className="mt-4 w-full py-2 px-3 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-200 text-xs font-bold flex items-center justify-center gap-2 transition-colors border border-stone-700"
+              >
+                <Download size={14} />
+                <span>Download Light SVG</span>
+              </a>
+            </div>
+
+            {/* Card 6: Scalable Vector SVG (Dark) */}
+            <div className="bg-[#122b1c] rounded-2xl border border-[#295a3d] p-4 flex flex-col justify-between">
+              <div>
+                <div className="w-full aspect-[16/9] rounded-xl overflow-hidden bg-[#0c0a09] border border-amber-500/30 mb-3 flex items-center justify-center p-3">
+                  <img
+                    src="/hattrick-coffee-logo-dark.svg"
+                    alt="Dark Vector SVG"
+                    className="max-h-full w-full object-contain"
+                  />
+                </div>
+                <div className="flex items-center justify-between">
+                  <h4 className="font-bold text-white text-sm">Scalable SVG (Dark)</h4>
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-950 text-amber-300 border border-amber-800">
+                    Vector SVG
+                  </span>
+                </div>
+                <p className="text-xs text-stone-300 mt-1 leading-relaxed">
+                  Dark mode vector with imperial gold gradients and cream typography optimized for dark screens and neon applications.
+                </p>
+              </div>
+
+              <a
+                href="/hattrick-coffee-logo-dark.svg"
+                download="hattrick-coffee-logo-dark.svg"
+                className="mt-4 w-full py-2 px-3 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-200 text-xs font-bold flex items-center justify-center gap-2 transition-colors border border-stone-700"
+              >
+                <Download size={14} />
+                <span>Download Dark SVG</span>
+              </a>
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* Admin Logo Asset Suite Modal */}
+      <HattrickLogoModal
+        isOpen={isAssetModalOpen}
+        onClose={() => setIsAssetModalOpen(false)}
+      />
 
     </div>
   );

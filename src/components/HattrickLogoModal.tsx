@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Download, Copy, Check, X, Sparkles, Layers, FileCode, Eye, Image as ImageIcon } from "lucide-react";
+import { Download, Copy, Check, X, Sparkles, Layers, FileCode, Eye, Image as ImageIcon, Tv } from "lucide-react";
 
 interface HattrickLogoModalProps {
   isOpen: boolean;
@@ -7,7 +7,7 @@ interface HattrickLogoModalProps {
 }
 
 export const HattrickLogoModal: React.FC<HattrickLogoModalProps> = ({ isOpen, onClose }) => {
-  const [activeView, setActiveView] = useState<"emblem" | "full_lockup" | "vector_light" | "vector_dark">("emblem");
+  const [activeView, setActiveView] = useState<"hero_banner" | "emblem" | "full_lockup" | "vector_light" | "vector_dark">("hero_banner");
   const [copied, setCopied] = useState(false);
   const [downloadingPng, setDownloadingPng] = useState(false);
 
@@ -36,6 +36,10 @@ export const HattrickLogoModal: React.FC<HattrickLogoModalProps> = ({ isOpen, on
 
   // Handle PNG generation for vectors
   const handleDownloadPng = async () => {
+    if (activeView === "hero_banner") {
+      handleDownloadAsset("/assets/aistudio/image_74f28168.png", "hattrick-coffee-dstv-hero-banner.png");
+      return;
+    }
     if (activeView === "emblem") {
       handleDownloadAsset("/assets/aistudio/hattrick_emblem_cropped.png", "hattrick-coffee-emblem-transparent.png");
       return;
@@ -110,12 +114,12 @@ export const HattrickLogoModal: React.FC<HattrickLogoModalProps> = ({ isOpen, on
         {/* Top Header Bar */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-stone-800 bg-[#161616]">
           <div className="flex items-center gap-3">
-            <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse" />
+            <span className="w-2.5 h-2.5 rounded-full bg-cyan-400 animate-pulse" />
             <div>
               <h2 className="text-lg font-bold text-white tracking-wide flex items-center gap-2">
-                HATTRICK COFFEE Brand Asset
-                <span className="text-xs font-mono px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-300 border border-amber-500/30">
-                  Official Asset
+                HATTRICK COFFEE Brand Asset Suite
+                <span className="text-xs font-mono px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-300 border border-cyan-500/30">
+                  Official Assets
                 </span>
               </h2>
               <p className="text-xs text-stone-400">
@@ -134,6 +138,18 @@ export const HattrickLogoModal: React.FC<HattrickLogoModalProps> = ({ isOpen, on
         {/* View Switcher Tabs */}
         <div className="flex items-center gap-2 px-6 pt-4 border-b border-stone-800 bg-[#141414] text-xs overflow-x-auto">
           <button
+            onClick={() => setActiveView("hero_banner")}
+            className={`px-3 py-2 rounded-t-lg font-bold flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
+              activeView === "hero_banner"
+                ? "bg-[#1f1f1f] text-cyan-300 border-t-2 border-cyan-400"
+                : "text-stone-400 hover:text-stone-200"
+            }`}
+          >
+            <Tv size={14} className="text-cyan-400" />
+            <span>Realistic Hero Banner (1376x768)</span>
+          </button>
+
+          <button
             onClick={() => setActiveView("emblem")}
             className={`px-3 py-2 rounded-t-lg font-bold flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
               activeView === "emblem"
@@ -142,7 +158,7 @@ export const HattrickLogoModal: React.FC<HattrickLogoModalProps> = ({ isOpen, on
             }`}
           >
             <ImageIcon size={14} />
-            <span>Exact Attached Emblem</span>
+            <span>Coffee-Ball Emblem</span>
           </button>
 
           <button
@@ -154,7 +170,7 @@ export const HattrickLogoModal: React.FC<HattrickLogoModalProps> = ({ isOpen, on
             }`}
           >
             <Eye size={14} />
-            <span>Full Lockup (Image)</span>
+            <span>Horizontal Logo Lockup</span>
           </button>
 
           <button
@@ -186,12 +202,25 @@ export const HattrickLogoModal: React.FC<HattrickLogoModalProps> = ({ isOpen, on
         <div className="p-6 flex flex-col gap-6">
           {/* Main Visual Display Canvas */}
           <div
-            className={`w-full rounded-2xl overflow-hidden border-2 border-stone-800 flex items-center justify-center p-6 sm:p-10 transition-colors duration-300 min-h-[300px] ${
-              activeView === "vector_dark"
-                ? "bg-[#0b0a09]"
+            className={`w-full rounded-2xl overflow-hidden border-2 border-stone-800 flex items-center justify-center p-4 sm:p-8 transition-colors duration-300 min-h-[300px] ${
+              activeView === "vector_dark" || activeView === "hero_banner"
+                ? "bg-[#050b14]"
                 : "bg-[#fbf8f3]"
             }`}
           >
+            {activeView === "hero_banner" && (
+              <div className="w-full flex flex-col items-center">
+                <img
+                  src="/assets/aistudio/image_74f28168.png"
+                  alt="Realistic Player Kicking Ball Hero Graphic"
+                  className="w-full max-h-[460px] object-contain rounded-xl shadow-2xl border border-cyan-500/30"
+                />
+                <span className="text-[11px] font-mono text-cyan-400 mt-2 font-bold">
+                  Official 16:9 Cinematic Digital Artwork (1376×768)
+                </span>
+              </div>
+            )}
+
             {activeView === "emblem" && (
               <div className="flex flex-col sm:flex-row items-center justify-center gap-8">
                 <div className="flex flex-col items-center">
@@ -246,7 +275,33 @@ export const HattrickLogoModal: React.FC<HattrickLogoModalProps> = ({ isOpen, on
 
           {/* Action Buttons Row */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            {activeView === "emblem" ? (
+            {activeView === "hero_banner" ? (
+              <>
+                <button
+                  onClick={() => handleDownloadAsset("/assets/aistudio/image_74f28168.png", "hattrick-coffee-dstv-hero-banner.png")}
+                  className="flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-cyan-400 hover:bg-cyan-300 text-stone-950 font-black text-xs transition-colors shadow-lg shadow-cyan-500/25 cursor-pointer"
+                >
+                  <Download className="w-4 h-4" />
+                  <span>Download 1376×768 PNG</span>
+                </button>
+
+                <button
+                  onClick={() => handleDownloadAsset("/assets/aistudio/hattrick_emblem_cropped.png", "hattrick-coffee-emblem-transparent.png")}
+                  className="flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-200 font-semibold text-xs transition-colors border border-stone-700 cursor-pointer"
+                >
+                  <Download className="w-4 h-4" />
+                  <span>Download Transparent Ball Emblem</span>
+                </button>
+
+                <button
+                  onClick={handleDownloadSvg}
+                  className="flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-200 font-semibold text-xs transition-colors border border-stone-700 cursor-pointer"
+                >
+                  <Download className="w-4 h-4" />
+                  <span>Download Vector SVG</span>
+                </button>
+              </>
+            ) : activeView === "emblem" ? (
               <>
                 <button
                   onClick={() => handleDownloadAsset("/assets/aistudio/logo_714966a9.jpg", "hattrick-coffee-emblem-original.jpg")}
@@ -306,19 +361,19 @@ export const HattrickLogoModal: React.FC<HattrickLogoModalProps> = ({ isOpen, on
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs text-stone-300">
             <div className="p-4 rounded-xl bg-[#161616] border border-stone-800">
               <h4 className="font-bold text-white mb-1.5 text-sm flex items-center gap-1.5">
-                <span className="text-amber-400">⚽</span> Exact Attached Emblem
+                <span className="text-cyan-400">⚽</span> Realistic Human Striker
               </h4>
               <p className="text-stone-400 leading-relaxed">
-                Matches 100% pixel-for-pixel with your uploaded file: authentic 3D faceted espresso panels, alternating cream patches, golden beveled rim, and smooth flowing S-curve fissure.
+                Full athletic anatomy, focused profile, dynamic mid-air volley kick with kinetic cyan rim lighting and glowing speed streaks across the stadium.
               </p>
             </div>
 
             <div className="p-4 rounded-xl bg-[#161616] border border-stone-800">
               <h4 className="font-bold text-white mb-1.5 text-sm flex items-center gap-1.5">
-                <span className="text-amber-400">✨</span> Transparent Cutout
+                <span className="text-cyan-400">☕</span> DSTV + Specialty Coffee
               </h4>
               <p className="text-stone-400 leading-relaxed">
-                Cleanly masked with sub-pixel anti-aliasing so the golden rim sits smoothly on dark or light backgrounds with no white borders.
+                Celebrates the premier Ethiopian sports lounge experience: live satellite match broadcasts paired with fresh ceremonial Sidama roasts.
               </p>
             </div>
 
@@ -327,7 +382,7 @@ export const HattrickLogoModal: React.FC<HattrickLogoModalProps> = ({ isOpen, on
                 <span className="text-amber-400">📍</span> Hawassa, Ethiopia
               </h4>
               <p className="text-stone-400 leading-relaxed">
-                Bilingual corporate identity featuring English typography and genuine Ethiopian Amharic script (<span className="text-amber-400 font-serif">ሃትሪክ ቡና</span>).
+                Complete bilingual identity featuring <strong>HATTRICK COFFEE</strong> and <strong>ሃትሪክ ቡና</strong> with authentic Ethiopian typography.
               </p>
             </div>
           </div>
