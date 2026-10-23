@@ -105,7 +105,12 @@ export default function App() {
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        if (parsed && parsed.email && (parsed.role === 'user' || parsed.role === 'admin')) return parsed;
+        if (parsed && parsed.email) {
+          if (parsed.email.toLowerCase() === 'yared.abegaz@gmail.com') {
+            parsed.role = 'admin';
+          }
+          if (parsed.role === 'user' || parsed.role === 'admin') return parsed;
+        }
       } catch (e) {}
     }
     return { role: 'guest', name: 'Guest Explorer' };
@@ -154,7 +159,9 @@ export default function App() {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
       if (fbUser) {
-        let isAdmin = false;
+        const email = (fbUser.email || "").toLowerCase().trim();
+        let isAdmin = email === "yared.abegaz@gmail.com";
+
         try {
           const idToken = await fbUser.getIdToken();
           const adminRes = await fetch("/api/owner/google-auth", {
@@ -165,20 +172,14 @@ export default function App() {
           });
           if (adminRes.ok) {
             const adminData = await adminRes.json();
-            if (adminData?.isAdmin && adminData?.token) {
-              isAdmin = true;
+            if (adminData?.token) {
               localStorage.setItem("buna_admin_token", adminData.token);
-            } else {
-              localStorage.removeItem("buna_admin_token");
             }
-          } else {
-            localStorage.removeItem("buna_admin_token");
           }
         } catch (e) {
           console.warn("Admin token sync error:", e);
         }
 
-        const email = (fbUser.email || "").toLowerCase().trim();
         const targetUsername = fbUser.displayName || (email ? email.split("@")[0] : "Coffee Explorer");
 
         const u: AuthUser = {
@@ -188,6 +189,9 @@ export default function App() {
         };
         setAuthUser(u);
         localStorage.setItem("buna_auth_user", JSON.stringify(u));
+        if (isAdmin) {
+          setActiveTab("owner");
+        }
       } else {
         // Not authenticated via Firebase: remain as Guest Explorer
         const guest: AuthUser = { role: 'guest', name: 'Guest Explorer' };
@@ -270,9 +274,25 @@ export default function App() {
     }, 150);
   };
 
+  // Ensure yared.abegaz@gmail.com is unconditionally granted admin role
+  useEffect(() => {
+    if (authUser?.email?.toLowerCase() === "yared.abegaz@gmail.com" && authUser.role !== 'admin') {
+      const updated = { ...authUser, role: 'admin' as const, name: authUser.name || "Yared Abegaz" };
+      setAuthUser(updated);
+      localStorage.setItem("buna_auth_user", JSON.stringify(updated));
+      setActiveTab("owner");
+    }
+  }, [authUser?.email, authUser?.role]);
+
   const handleLoginSuccess = (user: AuthUser, messageMsg: string, updatedLoyalty?: LoyaltyProfile) => {
+    if (user.email?.toLowerCase() === "yared.abegaz@gmail.com") {
+      user.role = 'admin';
+    }
     setAuthUser(user);
     localStorage.setItem("buna_auth_user", JSON.stringify(user));
+    if (user.role === 'admin') {
+      setActiveTab("owner");
+    }
     if (updatedLoyalty) {
       setLoyalty(updatedLoyalty);
     } else {

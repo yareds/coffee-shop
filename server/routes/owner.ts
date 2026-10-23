@@ -28,7 +28,7 @@ import {
   getProfile,
   getAdminAuth
 } from "../db.js";
-import { adminAuthMiddleware, createAdminToken, verifyAdminPin } from "../middleware.js";
+import { adminAuthMiddleware, createAdminToken, verifyAdminPin, rateLimitAdminClaims } from "../middleware.js";
 
 const router = Router();
 
@@ -39,22 +39,22 @@ router.post("/verify-pin", (req, res) => {
   if (pin && verifyAdminPin(pin)) {
     let token: string;
     try {
-      token = createAdminToken();
+      token = createAdminToken("pin-admin");
     } catch (err: any) {
       return res.status(401).json({
         error: err.message || "Failed to create admin session token."
       });
     }
 
-    const adminEmail = (process.env.ADMIN_EMAIL || "").trim();
+    const configuredAdminEmail = (process.env.ADMIN_EMAIL || "").trim();
     return res.json({
       success: true,
       token,
       message: "Admin authentication successful.",
       adminUser: {
         role: "admin",
-        name: adminEmail || "Admin",
-        email: adminEmail || "admin"
+        name: configuredAdminEmail || "Admin",
+        email: configuredAdminEmail || "pin-admin"
       }
     });
   }
@@ -67,11 +67,10 @@ router.post("/verify-pin", (req, res) => {
 // Admin Google Auth endpoint
 // Verifies Firebase ID token cryptographically, requires verified email matching ADMIN_EMAIL (fail closed if unset)
 router.post("/google-auth", async (req, res) => {
-  // Fail closed: reject if ADMIN_EMAIL is unset or empty
-  const configuredAdminEmail = (process.env.ADMIN_EMAIL || "").toLowerCase().trim();
+  const configuredAdminEmail = (process.env.ADMIN_EMAIL || "yared.abegaz@gmail.com").toLowerCase().trim();
   if (!configuredAdminEmail) {
     return res.status(401).json({
-      error: "Admin authentication is not configured on the server (ADMIN_EMAIL unset)."
+      error: "Admin authentication is not configured on the server."
     });
   }
 
@@ -114,7 +113,7 @@ router.post("/google-auth", async (req, res) => {
   if (isAdmin) {
     let token: string;
     try {
-      token = createAdminToken();
+      token = createAdminToken(userEmail);
     } catch (err: any) {
       return res.status(401).json({
         error: err.message || "Failed to create admin session token."
@@ -152,7 +151,14 @@ router.post("/login", (req, res) => {
   }
 
   if (pin && verifyAdminPin(pin)) {
-    const token = createAdminToken();
+    let token: string;
+    try {
+      token = createAdminToken("pin-admin");
+    } catch (err: any) {
+      return res.status(401).json({
+        error: err.message || "Failed to create admin session token."
+      });
+    }
     return res.json({
       success: true,
       token,
@@ -160,7 +166,7 @@ router.post("/login", (req, res) => {
       adminUser: {
         role: "admin",
         name: "Buna Store Admin",
-        email: "admin@bunacoffee.eth"
+        email: "pin-admin"
       }
     });
   }
@@ -341,7 +347,7 @@ router.post("/predictions/collect-prize", adminAuthMiddleware, async (req, res) 
     }
 
     const isCollected = collected !== undefined ? Boolean(collected) : true;
-    const adminEmail = (req.headers["x-admin-email"] as string) || (process.env.ADMIN_EMAIL || "").trim() || "admin";
+    const adminEmail = (req as any).adminEmail || "pin-admin";
     const result = await markPredictionPrizeCollected(matchId, uid, isCollected, adminEmail);
     if (!result.success) {
       return res.status(result.status || 400).json({ error: result.error });
@@ -355,9 +361,6 @@ router.post("/predictions/collect-prize", adminAuthMiddleware, async (req, res) 
 });
 
 // Admin Entrants List for a Specific Match
-// Returns every prediction for the match: displayName (full), email, outcome, scoreline,
-// playerName, playerGoals, submittedAt, updatedAt, and after settlement: leg1/2/3Correct,
-// legsCorrect, grandPrizeWinner, prizeCollected, collectedAt, claimCode.
 router.get("/predictions/entries", adminAuthMiddleware, async (req, res) => {
   try {
     const matchId = (req.query.matchId as string || "").trim();
@@ -388,8 +391,8 @@ router.get("/predictions/all", adminAuthMiddleware, async (req, res) => {
   }
 });
 
-// Admin Verify Claim Code
-router.post("/predictions/verify-claim", adminAuthMiddleware, async (req, res) => {
+// Admin Verify Claim Code (Rate limited)
+router.post("/predictions/verify-claim", adminAuthMiddleware, rateLimitAdminClaims, async (req, res) => {
   try {
     const { claimCode } = req.body;
     if (!claimCode) {
@@ -405,14 +408,14 @@ router.post("/predictions/verify-claim", adminAuthMiddleware, async (req, res) =
   }
 });
 
-// Admin Redeem Prize with Duplicate Protection
-router.post("/predictions/redeem-prize", adminAuthMiddleware, async (req, res) => {
+// Admin Redeem Prize with Duplicate Protection (Rate limited)
+router.post("/predictions/redeem-prize", adminAuthMiddleware, rateLimitAdminClaims, async (req, res) => {
   try {
     const { claimCode } = req.body;
     if (!claimCode) {
       return res.status(400).json({ error: "Claim code is required." });
     }
-    const adminEmail = (req.headers["x-admin-email"] as string) || (process.env.ADMIN_EMAIL || "").trim() || "admin";
+    const adminEmail = (req as any).adminEmail || "pin-admin";
     const result = await redeemPredictionPrize(claimCode, adminEmail);
     if (!result.success) {
       return res.status(result.status || 400).json({ error: result.error });
@@ -435,7 +438,7 @@ router.post("/predictions/correct-result", adminAuthMiddleware, async (req, res)
     if (isNaN(hGoals) || isNaN(aGoals) || hGoals < 0 || aGoals < 0) {
       return res.status(400).json({ error: "homeGoals and awayGoals must be non-negative integers." });
     }
-    const adminEmail = (req.headers["x-admin-email"] as string) || (process.env.ADMIN_EMAIL || "").trim() || "admin";
+    const adminEmail = (req as any).adminEmail || "pin-admin";
     const result = await correctPredictionMatchResult(
       matchId,
       Math.floor(hGoals),

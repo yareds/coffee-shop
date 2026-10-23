@@ -156,21 +156,10 @@ export default function OwnerDashboard() {
   const getAdminHeaders = () => {
     const token = localStorage.getItem("buna_admin_token") || "";
     const pin = localStorage.getItem("buna_admin_pin") || "";
-    let email = "";
-    try {
-      const stored = localStorage.getItem("buna_auth_user");
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        email = parsed.email || "";
-      }
-    } catch {
-      // ignore
-    }
     return {
       "Content-Type": "application/json",
       "X-Admin-Token": token,
-      "X-Admin-Pin": pin,
-      ...(email ? { "X-Admin-Email": email } : {})
+      "X-Admin-Pin": pin
     };
   };
 
@@ -485,7 +474,7 @@ export default function OwnerDashboard() {
               ...prev.prediction,
               prizeCollected: true,
               prizeCollectedAt: new Date().toISOString(),
-              collectedBy: "yared.abegaz@gmail.com"
+              collectedBy: data.prediction?.collectedBy || "Staff"
             }
           }));
           loadDashboardData();

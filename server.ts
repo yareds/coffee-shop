@@ -51,6 +51,22 @@ app.get("/api/ethiopia/regions", (req, res) => {
   res.json(ethiopianRegions);
 });
 
+// Check environment secrets outside local dev
+const checkSecretsOnStartup = () => {
+  const isLocalDev = process.env.NODE_ENV !== "production" && !process.env.K_SERVICE;
+  if (!isLocalDev) {
+    const missing: string[] = [];
+    if (!process.env.ADMIN_PIN?.trim()) missing.push("ADMIN_PIN");
+    if (!process.env.ADMIN_EMAIL?.trim()) missing.push("ADMIN_EMAIL");
+    if (!process.env.ADMIN_TOKEN_SECRET?.trim() || process.env.ADMIN_TOKEN_SECRET.trim().length < 32) {
+      missing.push("ADMIN_TOKEN_SECRET (unset or < 32 chars)");
+    }
+    if (missing.length > 0) {
+      console.error(`🚨 SECURITY CONFIGURATION ERROR ON STARTUP: Missing required production secrets: ${missing.join(", ")}`);
+    }
+  }
+};
+
 // 404 for unknown /api/* routes
 app.all("/api/*", (req, res) => {
   res.status(404).json({ error: "Not found" });
@@ -58,6 +74,8 @@ app.all("/api/*", (req, res) => {
 
 // Server Initialization
 const startServer = async () => {
+  checkSecretsOnStartup();
+
   if (process.env.NODE_ENV !== "production") {
     const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({
@@ -90,3 +108,4 @@ export { app };
 if (process.env.FUNCTIONS_TARGET !== "true") {
   startServer();
 }
+

@@ -16,7 +16,10 @@
       "cp \"$RESOURCE_DIR\"/../dist/server.cjs \"$RESOURCE_DIR\"/bundled-server.cjs"
     ]
   },
-  "firestore": {
-    "rules": "firestore.rules"
-  }
+  "firestore": [
+    {
+      "database": "ai-studio-bunaaipremiumcof-4a662efd-cc62-4ab6-a8ad-cd1f24a9e707",
+      "rules": "firestore.rules"
+    }
+  ]
 }

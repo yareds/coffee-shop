@@ -1427,6 +1427,16 @@ export async function voidPredictionMatch(matchId: string): Promise<{ success: b
   return { success: true, match };
 }
 
+export function generateCrockfordClaimCode(): string {
+  const CHARS = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
+  const bytes = crypto.randomBytes(10);
+  let code = "";
+  for (let i = 0; i < 10; i++) {
+    code += CHARS[bytes[i] % CHARS.length];
+  }
+  return code;
+}
+
 export async function getUserPrediction(matchId: string, uid: string): Promise<Prediction | null> {
   getAdminDb();
   const docId = `${matchId}_${uid}`;
@@ -1448,7 +1458,11 @@ export async function getUserPrediction(matchId: string, uid: string): Promise<P
     pred = memoryState.predictions.find(p => p.matchId === matchId && p.uid === uid) || null;
   }
   if (pred) {
-    pred.claimCode = pred.claimCode || computeClaimCode(pred.matchId, pred.uid);
+    if (pred.grandPrizeWinner && !pred.claimCode) {
+      pred.claimCode = generateCrockfordClaimCode();
+    } else if (!pred.grandPrizeWinner) {
+      delete pred.claimCode;
+    }
   }
   return pred;
 }
@@ -1613,15 +1627,6 @@ export async function saveUserPrediction(
   return { success: true, prediction, serverNow };
 }
 
-export function computeClaimCode(matchId: string, uid: string): string {
-  const secret = (process.env.ADMIN_TOKEN_SECRET || "").trim() || "default_buna_admin_secret";
-  return crypto.createHmac("sha256", secret).update(`${matchId}:${uid}`).digest("hex").slice(0, 6).toUpperCase();
-}
-
-export function generateClaimCode(matchId: string, uid: string): string {
-  return computeClaimCode(matchId, uid);
-}
-
 export async function settlePredictionMatch(
   matchId: string,
   homeGoals: number,
@@ -1717,23 +1722,30 @@ export async function settlePredictionMatch(
     const leg3Correct = Number(p.playerGoals) === expectedGoals;
     const legsCorrect = (leg1Correct ? 1 : 0) + (leg2Correct ? 1 : 0) + (leg3Correct ? 1 : 0);
     const grandPrizeWinner = legsCorrect === 3;
-    const claimCode = p.claimCode || generateClaimCode(matchId, p.uid);
+    const claimCode = grandPrizeWinner ? (p.claimCode || generateCrockfordClaimCode()) : undefined;
 
     if (leg1Correct) leg1CorrectCount++;
     if (leg2Correct) leg2CorrectCount++;
     if (leg3Correct) leg3CorrectCount++;
     if (grandPrizeWinner) grandPrizeWinnersCount++;
 
-    return {
+    const updated: Prediction = {
       ...p,
       leg1Correct,
       leg2Correct,
       leg3Correct,
       legsCorrect,
       grandPrizeWinner,
-      claimCode,
       prizeCollected: p.prizeCollected || false
     };
+
+    if (claimCode) {
+      updated.claimCode = claimCode;
+    } else {
+      delete updated.claimCode;
+    }
+
+    return updated;
   });
 
   const updatedResult: MatchResult = {
@@ -1837,7 +1849,7 @@ export async function correctPredictionMatchResult(
   const auditEntry: MatchAuditEntry = {
     id: "audit_" + Date.now(),
     changedAt: new Date().toISOString(),
-    adminEmail: adminEmail || (process.env.ADMIN_EMAIL || "").trim() || "admin",
+    adminEmail: adminEmail || "pin-admin",
     reason: reason.trim() || "VAR correction / Official score revision",
     previousResult: match.result ? JSON.parse(JSON.stringify(match.result)) : undefined,
     newResult: {
@@ -1895,13 +1907,8 @@ export async function getMatchStats(matchId: string): Promise<{
 }
 
 export async function getMatchWinners(matchId: string): Promise<Array<{
-  uid: string;
   displayName: string;
   prizeCollected: boolean;
-  prizeCollectedAt?: string;
-  collectedAt?: string;
-  collectedBy?: string;
-  claimCode?: string;
 }>> {
   getAdminDb();
   let predictions: Prediction[] = [];
@@ -1917,13 +1924,8 @@ export async function getMatchWinners(matchId: string): Promise<Array<{
   }
 
   return predictions.map(p => ({
-    uid: p.uid,
     displayName: formatWinnerName(p.displayName),
-    prizeCollected: Boolean(p.prizeCollected),
-    prizeCollectedAt: p.prizeCollectedAt || p.collectedAt,
-    collectedAt: p.collectedAt || p.prizeCollectedAt,
-    collectedBy: p.collectedBy,
-    claimCode: p.claimCode || computeClaimCode(matchId, p.uid)
+    prizeCollected: Boolean(p.prizeCollected)
   }));
 }
 
@@ -1958,13 +1960,13 @@ export async function getAdminMatchWinners(matchId: string): Promise<Array<{
 
   return predictions.map(p => ({
     uid: p.uid,
-    displayName: p.displayName, // Full name for admin
+    displayName: p.displayName,
     email: p.email || userMap.get(p.uid) || "",
     prizeCollected: Boolean(p.prizeCollected),
     prizeCollectedAt: p.prizeCollectedAt || p.collectedAt,
     collectedAt: p.collectedAt || p.prizeCollectedAt,
     collectedBy: p.collectedBy,
-    claimCode: (p.claimCode && p.claimCode.length === 6) ? p.claimCode : computeClaimCode(matchId, p.uid)
+    claimCode: p.claimCode || generateCrockfordClaimCode()
   }));
 }
 
@@ -1985,7 +1987,7 @@ export async function getMatchEntries(matchId: string): Promise<Array<{
   grandPrizeWinner?: boolean;
   prizeCollected?: boolean;
   collectedAt?: string;
-  claimCode: string;
+  claimCode?: string;
 }>> {
   getAdminDb();
   let predictions: Prediction[] = [];
@@ -2023,7 +2025,7 @@ export async function getMatchEntries(matchId: string): Promise<Array<{
     grandPrizeWinner: p.grandPrizeWinner,
     prizeCollected: p.prizeCollected,
     collectedAt: p.collectedAt || p.prizeCollectedAt,
-    claimCode: (p.claimCode && p.claimCode.length === 6) ? p.claimCode : computeClaimCode(matchId, p.uid)
+    claimCode: p.grandPrizeWinner ? (p.claimCode || generateCrockfordClaimCode()) : undefined
   }));
 }
 
@@ -2031,7 +2033,7 @@ export async function markPredictionPrizeCollected(
   matchId: string,
   uid: string,
   collected: boolean = true,
-  adminEmail: string = (process.env.ADMIN_EMAIL || "").trim() || "admin"
+  adminEmail: string = "pin-admin"
 ): Promise<{ success: boolean; status?: number; error?: string; prediction?: Prediction }> {
   getAdminDb();
   const docId = `${matchId}_${uid}`;
@@ -2110,7 +2112,7 @@ export async function markPredictionPrizeCollected(
   return { success: true, prediction: pred };
 }
 
-export async function verifyPredictionClaim(claimCodeOrDocId: string): Promise<{
+export async function verifyPredictionClaim(claimCode: string): Promise<{
   success: boolean;
   status?: number;
   prediction?: Prediction;
@@ -2118,7 +2120,7 @@ export async function verifyPredictionClaim(claimCodeOrDocId: string): Promise<{
   error?: string;
 }> {
   getAdminDb();
-  const cleanCode = (claimCodeOrDocId || "").trim();
+  const cleanCode = (claimCode || "").trim().toUpperCase();
   if (!cleanCode) {
     return { success: false, status: 400, error: "Please provide a valid claim reference code." };
   }
@@ -2126,16 +2128,10 @@ export async function verifyPredictionClaim(claimCodeOrDocId: string): Promise<{
   let prediction: Prediction | null = null;
   if (isFirestoreAvailable && COLLECTIONS) {
     try {
-      // 1. Try claimCode query
+      // Query ONLY by claimCode (do not accept raw docId or unverified user prediction IDs)
       const snap = await COLLECTIONS.predictions.where("claimCode", "==", cleanCode).limit(1).get();
       if (!snap.empty) {
         prediction = snap.docs[0].data() as Prediction;
-      } else {
-        // 2. Try docId
-        const docSnap = await COLLECTIONS.predictions.doc(cleanCode).get();
-        if (docSnap.exists) {
-          prediction = docSnap.data() as Prediction;
-        }
       }
     } catch (err) {
       logFirestoreFallback("verifyPredictionClaim", err);
@@ -2144,12 +2140,12 @@ export async function verifyPredictionClaim(claimCodeOrDocId: string): Promise<{
 
   if (!prediction) {
     prediction = memoryState.predictions.find(
-      p => p.claimCode === cleanCode || `${p.matchId}_${p.uid}` === cleanCode
+      p => p.claimCode === cleanCode
     ) || null;
   }
 
-  if (!prediction) {
-    return { success: false, status: 404, error: `No prediction found matching reference code "${cleanCode}".` };
+  if (!prediction || !prediction.grandPrizeWinner) {
+    return { success: false, status: 404, error: `No winning prediction found matching claim code "${cleanCode}".` };
   }
 
   const match = await getPredictionMatch(prediction.matchId);
@@ -2157,10 +2153,10 @@ export async function verifyPredictionClaim(claimCodeOrDocId: string): Promise<{
 }
 
 export async function redeemPredictionPrize(
-  claimCodeOrDocId: string,
+  claimCode: string,
   adminEmail: string
 ): Promise<{ success: boolean; status?: number; prediction?: Prediction; error?: string }> {
-  const verify = await verifyPredictionClaim(claimCodeOrDocId);
+  const verify = await verifyPredictionClaim(claimCode);
   if (!verify.success || !verify.prediction) {
     return { success: false, status: verify.status || 404, error: verify.error || "Prediction not found." };
   }
@@ -2204,7 +2200,7 @@ export async function getUserAllPredictions(uid: string): Promise<UserPrediction
     const match = matchMap.get(p.matchId);
     return {
       ...p,
-      claimCode: p.claimCode || generateClaimCode(p.matchId, p.uid),
+      claimCode: p.grandPrizeWinner ? (p.claimCode || generateCrockfordClaimCode()) : undefined,
       match
     };
   });
@@ -2252,7 +2248,7 @@ export async function getAllPredictionsAdmin(filter?: {
     const reg = userMap.get(p.uid);
     return {
       ...p,
-      claimCode: p.claimCode || generateClaimCode(p.matchId, p.uid),
+      claimCode: p.grandPrizeWinner ? (p.claimCode || generateCrockfordClaimCode()) : undefined,
       match,
       registeredEmail: reg?.email
     };

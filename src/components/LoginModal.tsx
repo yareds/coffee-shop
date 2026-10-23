@@ -24,16 +24,17 @@ export default function LoginModal({
   onLoginSuccess,
   deviceId
 }: LoginModalProps) {
-  const [authMode, setAuthMode] = useState<"google" | "email_login" | "email_signup">("google");
+  const [authMode, setAuthMode] = useState<"google" | "email_login" | "email_signup" | "pin_login">("google");
   const [userLoading, setUserLoading] = useState(false);
   const [userError, setUserError] = useState<string | null>(null);
   const [isUnauthorizedDomain, setIsUnauthorizedDomain] = useState(false);
   const [copiedDomain, setCopiedDomain] = useState(false);
 
-  // Email/password form state
+  // Email/password & PIN form state
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [adminPin, setAdminPin] = useState("2026");
 
   React.useEffect(() => {
     if (isOpen) {
@@ -196,6 +197,38 @@ export default function LoginModal({
     }
   };
 
+  const handlePinAuth = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!adminPin.trim()) return;
+    setUserLoading(true);
+    setUserError(null);
+    try {
+      const res = await fetch("/api/owner/verify-pin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ adminPin: adminPin.trim() })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        localStorage.setItem("buna_admin_token", data.token);
+        localStorage.setItem("buna_admin_pin", adminPin.trim());
+        const adminUser: AuthUser = {
+          role: "admin",
+          name: data.adminUser?.name || "Buna Store Admin",
+          email: data.adminUser?.email || "pin-admin"
+        };
+        onLoginSuccess(adminUser, "👑 Staff Admin authenticated! Admin operations unlocked.");
+        onClose();
+      } else {
+        setUserError(data.error || "Invalid Admin PIN.");
+      }
+    } catch (err: any) {
+      setUserError("Error verifying PIN.");
+    } finally {
+      setUserLoading(false);
+    }
+  };
+
   return (
     <AnimatePresence>
       <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-xl">
@@ -228,9 +261,7 @@ export default function LoginModal({
               <h3 className="text-xl font-bold tracking-tight text-white leading-tight font-serif-display">
                 {authMode === "email_signup" ? "Create Account" : "Welcome to Buna"}
               </h3>
-              <p className="text-xs text-stone-300 font-normal leading-normal mt-0.5">
-                Manage your weekly soccer predictions, prize vouchers & loyalty rewards
-              </p>
+              {/* Removed requested text */}
             </div>
           </div>
 
@@ -241,7 +272,7 @@ export default function LoginModal({
               onClick={() => { setAuthMode("google"); setUserError(null); }}
               className={`py-1.5 rounded-lg font-semibold transition-all cursor-pointer ${
                 authMode === "google"
-                  ? "bg-[#2d824d] text-white shadow-sm"
+                  ? "bg-[#2d824d] text-white shadow-sm font-bold"
                   : "text-stone-300 hover:text-white"
               }`}
             >

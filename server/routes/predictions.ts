@@ -8,8 +8,7 @@ import {
   getMatchStats,
   getMatchWinners,
   verifyUserToken,
-  getUserAllPredictions,
-  verifyPredictionClaim
+  getUserAllPredictions
 } from "../db.js";
 
 const router = Router();
@@ -151,22 +150,7 @@ const handleUserPredictions = async (req: any, res: any) => {
 router.get("/mine", handleUserPredictions);
 router.get("/my-predictions", handleUserPredictions);
 
-// 5. GET /api/predictions/claim/:code
-// Public verification lookup for coffee shop counter
-router.get("/claim/:code", async (req, res) => {
-  try {
-    const code = req.params.code;
-    const result = await verifyPredictionClaim(code);
-    if (!result.success) {
-      return res.status(404).json({ error: result.error });
-    }
-    res.json({ success: true, ...result });
-  } catch (err: any) {
-    res.status(500).json({ error: getSafeErrorMessage(err, "Failed to verify claim code") });
-  }
-});
-
-// 6. POST /api/predictions
+// 5. POST /api/predictions
 // Submit or edit user prediction before kickoff.
 // Requires valid Google ID token via Authorization: Bearer <token>.
 // Server enforces verified uid and server-side kickoff lock check.
