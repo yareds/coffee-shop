@@ -174,9 +174,9 @@
 
     <!-- ROW 2: AMHARIC SCRIPT "ሃትሪክ ቡና" -->
     <text x="355" 
-          y="266" 
+          y="272" 
           font-family="'Noto Sans Ethiopic', 'Nyala', 'Abyssinica SIL', sans-serif" 
-          font-size="50" 
+          font-size="64" 
           font-weight="900" 
           letter-spacing="0.06em" 
           fill="#2C170E">
@@ -184,8 +184,8 @@
     </text>
 
     <!-- ROW 2 (ADJACENT): "HAWASSA, ETHIOPIA" -->
-    <text x="630" 
-          y="264" 
+    <text x="690" 
+          y="266" 
           font-family="'Plus Jakarta Sans', 'Inter', -apple-system, sans-serif" 
           font-size="21" 
           font-weight="700" 

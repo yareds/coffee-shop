@@ -16,7 +16,6 @@ import CustomerLoyalty from "./components/CustomerLoyalty";
 import CoffeeCupSVG from "./components/CoffeeCupSVG";
 import LoginModal from "./components/LoginModal";
 import OwnerDashboard from "./components/OwnerDashboard";
-import { AnimatedCounter } from "./components/AnimatedCounter";
 import BunaLogo from "./components/BunaLogo";
 import HattrickLogoModal from "./components/HattrickLogoModal";
 import HattrickHeroBanner from "./components/HattrickHeroBanner";
@@ -654,88 +653,6 @@ export default function App() {
               onOpenLogoModal={() => setIsLogoModalOpen(true)}
             />
 
-            {/* UNIFIED HERO STATS CARDS DASHBOARD (MOBILE-FIRST RESPONSIVE GRID) */}
-            <div className="grid grid-cols-1 min-[420px]:grid-cols-2 md:grid-cols-4 gap-4 sm:gap-5 mt-12 pt-8 border-t border-[#295a3d]">
-              
-              {/* Stat Card 1: Points */}
-              <div className="bg-[#1a3e29] border border-[#295a3d] rounded-2xl p-5 sm:p-6 flex flex-col justify-between">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-mono text-stone-300 uppercase tracking-wider font-medium">Loyalty Points</span>
-                  <div className="h-8 w-8 rounded-xl bg-[#2d824d]/20 border border-[#2d824d]/40 flex items-center justify-center text-[#42bd6c]">
-                    <Award size={16} />
-                  </div>
-                </div>
-                <div className="flex items-baseline gap-2">
-                  <span className="text-2xl sm:text-3xl font-mono font-bold text-white">
-                    <AnimatedCounter value={loyalty ? loyalty.points : 240} />
-                  </span>
-                  <span className="text-[10px] font-mono text-[#42bd6c] font-semibold">Pts</span>
-                </div>
-                <p className="text-[10px] text-stone-300 font-sans mt-2">Level 2 Ethiopian Explorer</p>
-              </div>
-
-              {/* Stat Card 2: Digital Stamps */}
-              <div className="bg-[#1a3e29] border border-[#295a3d] rounded-2xl p-5 sm:p-6 flex flex-col justify-between">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-mono text-stone-300 uppercase tracking-wider font-medium">Digital Stamps</span>
-                  <div className="h-8 w-8 rounded-xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400">
-                    <Award size={16} />
-                  </div>
-                </div>
-                <div>
-                  <div className="flex items-baseline justify-between mb-1.5">
-                    <span className="text-2xl sm:text-3xl font-mono font-bold text-white">
-                      <AnimatedCounter value={loyalty ? loyalty.stampsCount : 7} />/10
-                    </span>
-                    <span className="text-[10px] font-mono text-emerald-400 font-bold">
-                      {Math.min(100, Math.round(((loyalty?.stampsCount || 7) / 10) * 100))}%
-                    </span>
-                  </div>
-                  {/* Visual Progress Bar */}
-                  <div className="w-full h-1.5 rounded-full bg-[#122b1c] overflow-hidden">
-                    <div 
-                      className="h-full bg-gradient-to-r from-[#2d824d] to-[#42bd6c] rounded-full transition-all duration-500" 
-                      style={{ width: `${Math.min(100, ((loyalty?.stampsCount || 7) / 10) * 100)}%` }}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Stat Card 3: Virtual Beans */}
-              <div className="bg-[#1a3e29] border border-[#295a3d] rounded-2xl p-5 sm:p-6 flex flex-col justify-between">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-mono text-stone-300 uppercase tracking-wider font-medium">Virtual Beans</span>
-                  <div className="h-8 w-8 rounded-xl bg-[#2d824d]/20 border border-[#2d824d]/40 flex items-center justify-center text-[#42bd6c]">
-                    <Coffee size={16} />
-                  </div>
-                </div>
-                <div className="flex items-baseline gap-2">
-                  <span className="text-2xl sm:text-3xl font-mono font-bold text-[#42bd6c] flex items-center gap-1.5">
-                    <span>🫘</span> <AnimatedCounter value={loyalty ? loyalty.beansCount : 3} />
-                  </span>
-                </div>
-                <p className="text-[10px] text-stone-300 font-sans mt-2">Ready to redeem reward</p>
-              </div>
-
-              {/* Stat Card 4: Daily Streak */}
-              <div className="bg-[#1a3e29] border border-[#295a3d] rounded-2xl p-5 sm:p-6 flex flex-col justify-between">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-mono text-stone-300 uppercase tracking-wider font-medium">Daily Streak</span>
-                  <div className="h-8 w-8 rounded-xl bg-red-500/20 border border-red-500/40 flex items-center justify-center text-red-400">
-                    <Flame size={16} className="animate-pulse" />
-                  </div>
-                </div>
-                <div className="flex items-baseline gap-2">
-                  <span className="text-2xl sm:text-3xl font-mono font-bold text-white flex items-center gap-1">
-                    <AnimatedCounter value={loyalty ? loyalty.streak : 5} />
-                  </span>
-                  <span className="text-[10px] font-mono text-red-400 font-semibold">Days 🔥</span>
-                </div>
-                <p className="text-[10px] text-red-300 font-sans mt-2 font-medium">2x Loyalty Multiplier Active</p>
-              </div>
-
-            </div>
-
           </div>
         </section>
       )}
@@ -858,10 +775,10 @@ export default function App() {
           <BunaLogo size="md" onClick={() => setActiveTab("prize")} />
           <p className="font-sans italic text-[#42bd6c] font-light tracking-wide mt-1">"Buna dabo naw" — Coffee is our bread.</p>
           <p className="max-w-md mx-auto leading-relaxed text-stone-300">
-            Buna celebrates the ancient coffee heritage of Ethiopia alongside weekend matchday culture. Inspired by the highlands of Kaffa, Sidamo, and Yirgacheffe.
+            Hattrick Cafe celebrates the ancient coffee heritage of Ethiopia alongside weekend matchday culture. Inspired by the highlands of Kaffa, Sidamo, and Yirgacheffe.
           </p>
           <p className="text-[11px] text-stone-400 font-mono">
-            Buna is not affiliated with the Premier League or any football club.
+            Hattrick Cafe is not affiliated with the Premier League or any football club.
           </p>
           <div className="flex justify-center gap-4 text-[10px] font-mono uppercase tracking-widest mt-2 text-[#42bd6c]">
             <span>Coffee & Soccer Edition</span>

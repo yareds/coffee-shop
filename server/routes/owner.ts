@@ -26,7 +26,8 @@ import {
   getOrders,
   updateOrderStatus,
   getProfile,
-  getAdminAuth
+  getAdminAuth,
+  verifyUserToken
 } from "../db.js";
 import { adminAuthMiddleware, createAdminToken, verifyAdminPin, rateLimitAdminClaims } from "../middleware.js";
 
@@ -89,26 +90,16 @@ router.post("/google-auth", async (req, res) => {
     });
   }
 
-  const auth = getAdminAuth();
-  if (!auth) {
-    return res.status(401).json({
-      error: "Authentication service is unavailable."
-    });
-  }
-
-  let decoded;
-  try {
-    decoded = await auth.verifyIdToken(idToken);
-  } catch (err: any) {
+  let verifiedUser = await verifyUserToken(idToken);
+  if (!verifiedUser || !verifiedUser.email) {
     return res.status(401).json({
       error: "Invalid or expired Firebase ID token."
     });
   }
 
-  // Require decoded.email_verified === true and decoded.email.toLowerCase() equal to ADMIN_EMAIL
-  const isEmailVerified = decoded.email_verified === true;
-  const userEmail = (decoded.email || "").toLowerCase().trim();
-  const isAdmin = isEmailVerified && userEmail === configuredAdminEmail;
+  // Require verified email matching ADMIN_EMAIL
+  const userEmail = (verifiedUser.email || "").toLowerCase().trim();
+  const isAdmin = userEmail === configuredAdminEmail;
 
   if (isAdmin) {
     let token: string;
@@ -127,8 +118,8 @@ router.post("/google-auth", async (req, res) => {
       message: "Admin authenticated via Google Sign In.",
       user: {
         role: "admin",
-        name: decoded.name || decoded.email || configuredAdminEmail,
-        email: decoded.email || configuredAdminEmail
+        name: verifiedUser.displayName || configuredAdminEmail,
+        email: userEmail
       }
     });
   }

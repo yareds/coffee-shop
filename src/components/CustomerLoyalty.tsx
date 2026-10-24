@@ -126,7 +126,7 @@ export default function CustomerLoyalty({
             <span className="text-xs font-mono px-2 py-0.5 rounded-full bg-[#22683e]/20 text-[#38a15b] border border-[#22683e]/30 flex items-center gap-1">
               <Compass size={10} /> PASSPORT
             </span>
-            <span className="text-xs text-stone-500 font-mono">Buna Origin Trail</span>
+            <span className="text-xs text-stone-500 font-mono">Hattrick Cafe Origin Trail</span>
           </div>
           <h3 className="text-xl font-bold text-white tracking-tight">My Coffee Passport</h3>
           <p className="text-xs text-stone-400 mt-0.5">Explore coffees from Ethiopia's five historical regions. Complete your passport stamps to earn the **Ambassador Badge** & double reward points!</p>

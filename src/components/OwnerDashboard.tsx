@@ -50,7 +50,7 @@ export default function OwnerDashboard() {
   const [awayTeam, setAwayTeam] = useState("");
   const [competition, setCompetition] = useState("Premier Matchday");
   const [kickoffDateTime, setKickoffDateTime] = useState("");
-  const [prizeDesc, setPrizeDesc] = useState("1 Year of Free Buna Single-Origin Coffee & Match Ball");
+  const [prizeDesc, setPrizeDesc] = useState("1 Year of Free Hattrick Cafe Single-Origin Coffee & Match Ball");
   const [playersList, setPlayersList] = useState<MatchPlayer[]>([
     { name: "", team: "home" },
     { name: "", team: "away" }
@@ -502,7 +502,7 @@ export default function OwnerDashboard() {
             <span className="text-xs font-mono text-stone-300">Staff Operations</span>
           </div>
           <h2 className="text-2xl font-bold font-serif-display text-white tracking-tight">
-            Buna Cafe & Matchday Management
+            Hattrick Cafe & Matchday Management
           </h2>
           <p className="text-xs text-stone-300 mt-0.5">
             Manage Premier League prediction matches, customer entries, prize vouchers, and results settlement.

@@ -128,7 +128,16 @@ export default function MatchDayPrize({ authUser, onOpenLogin }: MatchDayPrizePr
         }
       }
 
-      const res = await fetch("/api/predictions/featured", { headers });
+      let res = await fetch("/api/predictions/featured", { headers });
+      if (res.status === 401 && auth.currentUser) {
+        try {
+          const freshToken = await auth.currentUser.getIdToken(true);
+          headers["Authorization"] = `Bearer ${freshToken}`;
+          res = await fetch("/api/predictions/featured", { headers });
+        } catch {
+          // ignore
+        }
+      }
       const data = await res.json();
 
       if (data.match) {
@@ -185,7 +194,16 @@ export default function MatchDayPrize({ authUser, onOpenLogin }: MatchDayPrizePr
         }
       }
 
-      const res = await fetch(`/api/predictions/match/${mId}`, { headers });
+      let res = await fetch(`/api/predictions/match/${mId}`, { headers });
+      if (res.status === 401 && auth.currentUser) {
+        try {
+          const freshToken = await auth.currentUser.getIdToken(true);
+          headers["Authorization"] = `Bearer ${freshToken}`;
+          res = await fetch(`/api/predictions/match/${mId}`, { headers });
+        } catch {
+          // ignore
+        }
+      }
       const data = await res.json();
 
       if (data.match) {
@@ -234,10 +252,22 @@ export default function MatchDayPrize({ authUser, onOpenLogin }: MatchDayPrizePr
     }
     try {
       setLoadingMyPreds(true);
-      const token = await auth.currentUser.getIdToken();
-      const res = await fetch("/api/predictions/mine", {
+      let token = await auth.currentUser.getIdToken();
+      let res = await fetch("/api/predictions/mine", {
         headers: { "Authorization": `Bearer ${token}` }
       });
+
+      if (res.status === 401 && auth.currentUser) {
+        try {
+          token = await auth.currentUser.getIdToken(true);
+          res = await fetch("/api/predictions/mine", {
+            headers: { "Authorization": `Bearer ${token}` }
+          });
+        } catch (refreshErr) {
+          console.warn("Token refresh error in loadMyPredictions:", refreshErr);
+        }
+      }
+
       const data = await res.json();
       if (data.success && data.predictions) {
         setMyPredictions(data.predictions);
@@ -323,23 +353,41 @@ export default function MatchDayPrize({ authUser, onOpenLogin }: MatchDayPrizePr
     setSubmitMsg(null);
 
     try {
-      const token = await auth.currentUser.getIdToken();
+      let token = await auth.currentUser.getIdToken();
       const scoreline = `${homeGoals}:${awayGoals}`;
+      const payload = {
+        matchId: match.id,
+        outcome,
+        scoreline,
+        playerName: selectedPlayer,
+        playerGoals
+      };
 
-      const res = await fetch("/api/predictions", {
+      let res = await fetch("/api/predictions", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           "Authorization": `Bearer ${token}`
         },
-        body: JSON.stringify({
-          matchId: match.id,
-          outcome,
-          scoreline,
-          playerName: selectedPlayer,
-          playerGoals
-        })
+        body: JSON.stringify(payload)
       });
+
+      // If token expired, force refresh once and retry
+      if (res.status === 401 && auth.currentUser) {
+        try {
+          token = await auth.currentUser.getIdToken(true);
+          res = await fetch("/api/predictions", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": `Bearer ${token}`
+            },
+            body: JSON.stringify(payload)
+          });
+        } catch (refreshErr) {
+          console.warn("Token refresh error in handleSubmitPrediction:", refreshErr);
+        }
+      }
 
       const data = await res.json();
       if (data.success && data.prediction) {
@@ -1210,7 +1258,7 @@ export default function MatchDayPrize({ authUser, onOpenLogin }: MatchDayPrizePr
               <div className="flex items-center gap-2">
                 <Trophy size={18} className="text-amber-400" />
                 <h4 className="text-base font-bold text-white font-mono uppercase tracking-wider">
-                  Official Buna Prize Vouchers
+                  Official Hattrick Cafe Prize Vouchers
                 </h4>
               </div>
 
@@ -1233,7 +1281,7 @@ export default function MatchDayPrize({ authUser, onOpenLogin }: MatchDayPrizePr
                           <Award size={18} className={isClaimed ? "text-stone-400" : "text-amber-400"} />
                           <div>
                             <span className="text-[10px] font-mono text-amber-300 uppercase font-black tracking-widest block">
-                              BUNA COFFEE × MATCHDAY WINNER
+                              HATTRICK CAFE × MATCHDAY WINNER
                             </span>
                             <h5 className="text-sm font-bold text-white">
                               {m ? `${m.homeTeam} vs ${m.awayTeam}` : "Premier Matchday"}
@@ -1257,7 +1305,7 @@ export default function MatchDayPrize({ authUser, onOpenLogin }: MatchDayPrizePr
                         <div>
                           <span className="text-[10px] font-mono text-stone-400 uppercase">Prize Entitlement</span>
                           <p className="text-white font-bold text-sm leading-snug">
-                            {m?.prizeDescription || "1 Year of Free Buna Single-Origin Coffee"}
+                            {m?.prizeDescription || "1 Year of Free Hattrick Cafe Single-Origin Coffee"}
                           </p>
                         </div>
 
@@ -1311,7 +1359,7 @@ export default function MatchDayPrize({ authUser, onOpenLogin }: MatchDayPrizePr
                         </div>
 
                         <p className="text-[10px] text-stone-400 leading-tight">
-                          Show this screen or quote your code to your Buna barista at the counter to claim your reward.
+                          Show this screen or quote your code to your Hattrick Cafe barista at the counter to claim your reward.
                         </p>
                       </div>
 
@@ -1406,7 +1454,7 @@ export default function MatchDayPrize({ authUser, onOpenLogin }: MatchDayPrizePr
                                     : "You won! Show this screen to the shop owner to collect your prize"}
                                 </span>
                                 <span className={`text-[11px] block ${pred.prizeCollected ? "text-stone-300" : "text-stone-900 font-medium"}`}>
-                                  {m?.prizeDescription || "Free Buna Single-Origin Coffee"}
+                                  {m?.prizeDescription || "Free Hattrick Cafe Single-Origin Coffee"}
                                 </span>
                               </div>
                             </div>

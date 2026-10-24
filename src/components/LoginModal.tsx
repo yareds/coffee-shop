@@ -259,7 +259,7 @@ export default function LoginModal({
             </div>
             <div>
               <h3 className="text-xl font-bold tracking-tight text-white leading-tight font-serif-display">
-                {authMode === "email_signup" ? "Create Account" : "Welcome to Buna"}
+                {authMode === "email_signup" ? "Create Account" : "Welcome to Hattrick Cafe"}
               </h3>
               {/* Removed requested text */}
             </div>
@@ -484,7 +484,7 @@ export default function LoginModal({
                       onClick={() => setAuthMode("email_signup")}
                       className="text-[#42bd6c] hover:underline cursor-pointer"
                     >
-                      New to Buna? Register for free
+                      New to Hattrick Cafe? Register for free
                     </button>
                   )}
 
@@ -500,7 +500,7 @@ export default function LoginModal({
             )}
 
             <p className="text-[10px] text-stone-400 text-center leading-relaxed mt-1">
-              Your personal Buna account stores weekly predictions, grand prize claims, and coffee loyalty stamps.
+              Your personal Hattrick Cafe account stores weekly predictions, grand prize claims, and coffee loyalty stamps.
             </p>
           </div>
         </motion.div>

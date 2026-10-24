@@ -223,7 +223,7 @@ export default function CommunityWall({ onPostAdded, authUser, onOpenLogin }: Co
         <div>
           <div className="flex items-center gap-2 mb-1">
             <span className="text-xs font-mono px-2 py-0.5 rounded-full bg-[#2d824d]/20 text-[#42bd6c] border border-[#2d824d]/40">COMMUNITY</span>
-            <span className="text-xs text-stone-300 font-mono">Buna Social Wall</span>
+            <span className="text-xs text-stone-300 font-mono">Hattrick Cafe Social Wall</span>
           </div>
           <h3 className="text-xl font-bold text-white tracking-tight">The Community Coffee Wall</h3>
           <p className="text-xs text-stone-300 mt-0.5">Share your tasting notes, latte art, or review our craft. Every post earns you 15 loyalty points!</p>

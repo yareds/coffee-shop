@@ -41,12 +41,12 @@ export const HattrickLogo: React.FC<HattrickLogoProps> = ({
   }[size];
 
   const amharicSizeClass = {
-    xs: "text-[10px]",
-    sm: "text-xs sm:text-sm",
-    md: "text-sm sm:text-base",
-    lg: "text-lg sm:text-xl",
-    xl: "text-xl sm:text-3xl",
-    hero: "text-2xl sm:text-4xl"
+    xs: "text-xs sm:text-sm font-extrabold",
+    sm: "text-sm sm:text-lg font-extrabold",
+    md: "text-lg sm:text-2xl lg:text-3xl font-black",
+    lg: "text-2xl sm:text-3xl lg:text-4xl font-black",
+    xl: "text-3xl sm:text-5xl lg:text-6xl font-black",
+    hero: "text-4xl sm:text-6xl lg:text-7xl font-black"
   }[size];
 
   const locationSizeClass = {
