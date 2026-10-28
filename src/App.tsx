@@ -105,8 +105,8 @@ export default function App() {
       try {
         const parsed = JSON.parse(saved);
         if (parsed && parsed.email) {
-          if (parsed.email.toLowerCase() === 'yared.abegaz@gmail.com') {
-            parsed.role = 'admin';
+          if (parsed.role === 'admin' && !localStorage.getItem("buna_admin_token")) {
+            parsed.role = 'user';
           }
           if (parsed.role === 'user' || parsed.role === 'admin') return parsed;
         }
@@ -159,7 +159,9 @@ export default function App() {
     const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
       if (fbUser) {
         const email = (fbUser.email || "").toLowerCase().trim();
-        let isAdmin = email === "yared.abegaz@gmail.com";
+        const configuredAdminEmail = (((import.meta as any).env?.VITE_ADMIN_EMAIL as string) || "yared.abegaz@gmail.com").toLowerCase().trim();
+        let isAdmin = false;
+        let serverError: string | null = null;
 
         try {
           const idToken = await fbUser.getIdToken();
@@ -169,14 +171,27 @@ export default function App() {
               "Authorization": `Bearer ${idToken}`
             }
           });
-          if (adminRes.ok) {
-            const adminData = await adminRes.json();
-            if (adminData?.token) {
-              localStorage.setItem("buna_admin_token", adminData.token);
+          const adminData = await adminRes.json().catch(() => null);
+          if (adminRes.ok && adminData?.isAdmin === true && adminData?.token) {
+            isAdmin = true;
+            localStorage.setItem("buna_admin_token", adminData.token);
+          } else {
+            localStorage.removeItem("buna_admin_token");
+            if (adminData?.error) {
+              serverError = adminData.error;
+            } else if (!adminRes.ok) {
+              serverError = `Server returned status ${adminRes.status}`;
             }
           }
-        } catch (e) {
+        } catch (e: any) {
           console.warn("Admin token sync error:", e);
+          localStorage.removeItem("buna_admin_token");
+          serverError = e?.message || "Failed to contact authorization server";
+        }
+
+        // If the signed-in email equals VITE_ADMIN_EMAIL but the server did not grant admin, show a toast with the server's error (display only, never authorization)
+        if (!isAdmin && email === configuredAdminEmail) {
+          triggerToast(`Admin access not granted: ${serverError || "Account not authorized by server."}`);
         }
 
         const targetUsername = fbUser.displayName || (email ? email.split("@")[0] : "Coffee Explorer");
@@ -197,6 +212,7 @@ export default function App() {
         setAuthUser(guest);
         localStorage.removeItem("buna_auth_user");
         localStorage.removeItem("buna_admin_token");
+        localStorage.removeItem("buna_admin_pin");
       }
     });
     return () => unsubscribe();
@@ -273,20 +289,7 @@ export default function App() {
     }, 150);
   };
 
-  // Ensure yared.abegaz@gmail.com is unconditionally granted admin role
-  useEffect(() => {
-    if (authUser?.email?.toLowerCase() === "yared.abegaz@gmail.com" && authUser.role !== 'admin') {
-      const updated = { ...authUser, role: 'admin' as const, name: authUser.name || "Yared Abegaz" };
-      setAuthUser(updated);
-      localStorage.setItem("buna_auth_user", JSON.stringify(updated));
-      setActiveTab("owner");
-    }
-  }, [authUser?.email, authUser?.role]);
-
   const handleLoginSuccess = (user: AuthUser, messageMsg: string, updatedLoyalty?: LoyaltyProfile) => {
-    if (user.email?.toLowerCase() === "yared.abegaz@gmail.com") {
-      user.role = 'admin';
-    }
     setAuthUser(user);
     localStorage.setItem("buna_auth_user", JSON.stringify(user));
     if (user.role === 'admin') {
@@ -306,6 +309,7 @@ export default function App() {
     setAuthUser(guest);
     localStorage.removeItem("buna_auth_user");
     localStorage.removeItem("buna_admin_token");
+    localStorage.removeItem("buna_admin_pin");
     if (activeTab === "owner") {
       setActiveTab("prize");
     }

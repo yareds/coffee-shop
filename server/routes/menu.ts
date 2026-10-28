@@ -6,7 +6,7 @@ import {
   toggleMenuItemStatus,
   deleteMenuItem
 } from "../db.js";
-import { adminAuthMiddleware } from "../middleware.js";
+import { adminAuthMiddleware, handleServerError } from "../middleware.js";
 
 const router = Router();
 
@@ -15,7 +15,7 @@ router.get("/", async (req, res) => {
     const items = await getMenuItems();
     res.json(items);
   } catch (err: any) {
-    res.status(500).json({ error: err.message || "Failed to fetch menu items" });
+    handleServerError(res, err, "Menu GET Error");
   }
 });
 
@@ -38,7 +38,7 @@ router.post("/", adminAuthMiddleware, async (req, res) => {
 
     res.json({ success: true, menuItems });
   } catch (err: any) {
-    res.status(500).json({ error: err.message || "Failed to update menu items" });
+    handleServerError(res, err, "Menu POST Error");
   }
 });
 

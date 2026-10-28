@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { getEvents, bookEvent } from "../db.js";
+import { handleServerError } from "../middleware.js";
 
 const router = Router();
 
@@ -8,7 +9,7 @@ router.get("/", async (req, res) => {
     const events = await getEvents();
     res.json(events);
   } catch (err: any) {
-    res.status(500).json({ error: err.message || "Failed to fetch events" });
+    handleServerError(res, err, "Events GET Error");
   }
 });
 
@@ -23,7 +24,7 @@ router.post("/book", async (req, res) => {
       res.status(400).json({ error: result.error || "No seats available or event not found" });
     }
   } catch (err: any) {
-    res.status(500).json({ error: err.message || "Failed to book event" });
+    handleServerError(res, err, "Events Book POST Error");
   }
 });
 

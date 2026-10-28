@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { getProfile, saveProfile, addActivityLog } from "../db.js";
+import { handleServerError } from "../middleware.js";
 
 const router = Router();
 
@@ -114,7 +115,7 @@ router.post("/stamp", async (req, res) => {
 
     res.json({ success: true, loyalty: profile });
   } catch (err: any) {
-    res.status(500).json({ error: err.message || "Failed to stamp passport" });
+    handleServerError(res, err, "Ethiopia Stamp POST Error");
   }
 });
 

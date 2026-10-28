@@ -1,5 +1,6 @@
 import type { Request, Response, NextFunction } from "express";
 import crypto from "crypto";
+import { verifyUserToken } from "./db.js";
 
 const EIGHT_HOURS_MS = 8 * 60 * 60 * 1000;
 
@@ -99,51 +100,24 @@ export const getAdminTokenEmail = (token?: string): string => {
       ? payload.email.trim().toLowerCase()
       : "pin-admin";
   } catch {
-    return "pin-admin";
+    return (process.env.ADMIN_EMAIL || "yared.abegaz@gmail.com").toLowerCase().trim();
   }
-};
-
-export const safeComparePin = (provided: string, expected: string): boolean => {
-  if (!provided || !expected) return false;
-  const bufProvided = Buffer.from(provided);
-  const bufExpected = Buffer.from(expected);
-  if (bufProvided.length !== bufExpected.length) {
-    return false;
-  }
-  return crypto.timingSafeEqual(bufProvided, bufExpected);
-};
-
-export const verifyAdminPin = (providedPin: string): boolean => {
-  let rawAdminPin = (process.env.ADMIN_PIN || "").trim();
-  if (!rawAdminPin && process.env.NODE_ENV !== "production") {
-    rawAdminPin = "2026";
-  }
-  if (!rawAdminPin) return false; // Fail closed in production if unset or empty
-  const normalizedProvidedPin = (providedPin || "").toString().trim();
-  return safeComparePin(normalizedProvidedPin, rawAdminPin);
 };
 
 export const adminAuthMiddleware = (req: Request, res: Response, next: NextFunction) => {
-  const tokenHeader = (req.headers["x-admin-token"] as string || "").trim();
-  const pinHeader = req.headers["x-admin-pin"] as string;
-  const pinBody = req.body?.adminPin || req.body?.pin;
-  // NOTE: Do NOT accept PIN via query string (req.query) to avoid logging sensitive PINs
+  let tokenHeader = (req.headers["x-admin-token"] as string || "").trim();
+  if (!tokenHeader && typeof req.headers.authorization === "string" && req.headers.authorization.startsWith("Bearer ")) {
+    tokenHeader = req.headers.authorization.substring(7).trim();
+  }
 
-  // 1. Check stateless signed session token
+  // Strictly check stateless signed admin session token (only X-Admin-Token is accepted)
   if (tokenHeader && isValidAdminToken(tokenHeader)) {
     (req as any).adminEmail = getAdminTokenEmail(tokenHeader);
     return next();
   }
 
-  // 2. Direct PIN verification (strictly matches configured ADMIN_PIN; fails closed if unset)
-  const providedPin = (pinHeader || pinBody || "").toString().trim();
-  if (providedPin && verifyAdminPin(providedPin)) {
-    (req as any).adminEmail = "pin-admin";
-    return next();
-  }
-
   res.status(401).json({
-    error: "Unauthorized: Valid Admin Session Token or PIN required."
+    error: "Unauthorized: Valid Admin Session Token required."
   });
 };
 
@@ -173,3 +147,91 @@ export const rateLimitAdminClaims = (req: Request, res: Response, next: NextFunc
   return next();
 };
 
+/**
+ * requireUser middleware:
+ * Validates Authorization: Bearer <Firebase ID token> strictly using verifyUserToken.
+ * Sets (req as any).user = { uid, displayName, email, emailVerified, provider }
+ * Rejects unauthenticated requests with 401.
+ */
+export const requireUser = async (req: Request, res: Response, next: NextFunction) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    return res.status(401).json({ error: "Unauthorized: Missing authentication token." });
+  }
+  const token = authHeader.substring(7).trim();
+  if (!token) {
+    return res.status(401).json({ error: "Unauthorized: Empty authentication token." });
+  }
+
+  const verified = await verifyUserToken(token);
+  if (!verified || !verified.uid) {
+    return res.status(401).json({ error: "Unauthorized: Invalid or expired authentication token." });
+  }
+
+  (req as any).user = verified;
+  next();
+};
+
+// Global in-memory rate limiter on all POSTs (60/min per IP)
+const postRateLimitMap = new Map<string, { count: number; resetAt: number }>();
+
+export const rateLimitAllPosts = (req: Request, res: Response, next: NextFunction) => {
+  const ip = req.ip || req.socket.remoteAddress || "unknown-ip";
+  const now = Date.now();
+  const windowMs = 60 * 1000; // 1 minute
+  const limit = 60;
+
+  let record = postRateLimitMap.get(ip);
+  if (!record || now > record.resetAt) {
+    record = { count: 1, resetAt: now + windowMs };
+    postRateLimitMap.set(ip, record);
+    return next();
+  }
+
+  if (record.count >= limit) {
+    return res.status(429).json({
+      error: "Too many requests. Global POST rate limit exceeded (max 60 requests/minute)."
+    });
+  }
+
+  record.count++;
+  return next();
+};
+
+// In-memory rate limiter for orders and profile creation (10/min per IP)
+const ordersAndProfilesRateLimitMap = new Map<string, { count: number; resetAt: number }>();
+
+export const rateLimitOrdersAndProfiles = (req: Request, res: Response, next: NextFunction) => {
+  const ip = req.ip || req.socket.remoteAddress || "unknown-ip";
+  const now = Date.now();
+  const windowMs = 60 * 1000; // 1 minute
+  const limit = 10;
+
+  let record = ordersAndProfilesRateLimitMap.get(ip);
+  if (!record || now > record.resetAt) {
+    record = { count: 1, resetAt: now + windowMs };
+    ordersAndProfilesRateLimitMap.set(ip, record);
+    return next();
+  }
+
+  if (record.count >= limit) {
+    return res.status(429).json({
+      error: "Too many requests. Rate limit exceeded for orders and profile creation (max 10 requests/minute)."
+    });
+  }
+
+  record.count++;
+  return next();
+};
+
+/**
+ * Standard server error response handler:
+ * Logs real error server-side and returns generic message in production.
+ */
+export const handleServerError = (res: Response, err: any, prefix = "Server error") => {
+  console.error(`[${prefix}]:`, err);
+  if (process.env.NODE_ENV === "production") {
+    return res.status(500).json({ error: "Internal server error" });
+  }
+  return res.status(500).json({ error: err?.message || "Internal server error" });
+};

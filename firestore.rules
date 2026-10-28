@@ -1,54 +1,31 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    match /{document=**} { allow read, write: if false; }
+    function signedIn() { return request.auth != null; }
 
-    // Default deny all access
-    match /{document=**} {
-      allow read, write: if false;
-    }
-
-    function isSignedIn() {
-      return request.auth != null;
-    }
-
-    function isOwner(userId) {
-      return isSignedIn() && request.auth.uid == userId;
-    }
-
-    function isValidId(id) {
-      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
-    }
-
-    // Users Collection
     match /users/{userId} {
-      allow get: if isSignedIn() && (request.auth.uid == userId || resource.data.uid == request.auth.uid);
-      allow list: if isSignedIn() && resource.data.uid == request.auth.uid;
-      allow create: if isSignedIn() && request.auth.uid == userId;
-      allow update: if isSignedIn() && request.auth.uid == userId;
-      allow delete: if false;
+      allow get: if signedIn() && request.auth.uid == userId;
+      allow create: if signedIn() && request.auth.uid == userId
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.get('role', 'user') == 'user';
+      allow update: if signedIn() && request.auth.uid == userId
+        && request.resource.data.uid == resource.data.uid
+        && request.resource.data.get('role', 'user') == 'user';
+      allow list, delete: if false;
     }
-
-    // Community Posts Collection (Coffee Wall)
     match /community_posts/{postId} {
       allow read: if true;
-      allow create: if isSignedIn();
-      allow update: if isSignedIn();
-      allow delete: if isSignedIn() && resource.data.authorUid == request.auth.uid;
-    }
-
-    // Orders Collection
-    match /orders/{orderId} {
-      allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || resource.data.customerName == request.auth.uid);
-      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
-      allow create: if isSignedIn();
-      allow update: if isSignedIn() && resource.data.userId == request.auth.uid;
-      allow delete: if false;
-    }
-
-    // Promotions Collection
-    match /promotions/{promoId} {
-      allow read: if true;
-      allow write: if isSignedIn();
+      allow create: if signedIn()
+        && request.resource.data.authorUid == request.auth.uid
+        && request.resource.data.likes == 0
+        && request.resource.data.text is string
+        && request.resource.data.text.size() > 0
+        && request.resource.data.text.size() <= 1000;
+      allow update: if signedIn()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likes'])
+        && request.resource.data.likes == resource.data.likes + 1;
+      allow delete: if signedIn() && resource.data.authorUid == request.auth.uid;
     }
   }
 }

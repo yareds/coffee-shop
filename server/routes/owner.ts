@@ -9,6 +9,7 @@ import {
   getAllPredictionMatches,
   getPredictionMatch,
   savePredictionMatch,
+  deletePredictionMatch,
   voidPredictionMatch,
   settlePredictionMatch,
   correctPredictionMatchResult,
@@ -29,45 +30,14 @@ import {
   getAdminAuth,
   verifyUserToken
 } from "../db.js";
-import { adminAuthMiddleware, createAdminToken, verifyAdminPin, rateLimitAdminClaims } from "../middleware.js";
+import { adminAuthMiddleware, createAdminToken, rateLimitAdminClaims } from "../middleware.js";
 
 const router = Router();
 
-// 1. Admin PIN verification & login endpoint
-router.post("/verify-pin", (req, res) => {
-  const pin = (req.body?.adminPin || req.body?.pin || "").toString().trim();
-
-  if (pin && verifyAdminPin(pin)) {
-    let token: string;
-    try {
-      token = createAdminToken("pin-admin");
-    } catch (err: any) {
-      return res.status(401).json({
-        error: err.message || "Failed to create admin session token."
-      });
-    }
-
-    const configuredAdminEmail = (process.env.ADMIN_EMAIL || "").trim();
-    return res.json({
-      success: true,
-      token,
-      message: "Admin authentication successful.",
-      adminUser: {
-        role: "admin",
-        name: configuredAdminEmail || "Admin",
-        email: configuredAdminEmail || "pin-admin"
-      }
-    });
-  }
-
-  res.status(401).json({
-    error: "Invalid Admin PIN."
-  });
-});
-
-// Admin Google Auth endpoint
-// Verifies Firebase ID token cryptographically, requires verified email matching ADMIN_EMAIL (fail closed if unset)
-router.post("/google-auth", async (req, res) => {
+// Admin Google Auth endpoint (and alias for /api/admin)
+// Grant admin ONLY when emailVerified === true AND provider === "google.com" AND the lowercased email equals ADMIN_EMAIL.
+// Otherwise return { success: true, isAdmin: false }.
+router.post(["/google-auth", "/auth"], async (req, res) => {
   const configuredAdminEmail = (process.env.ADMIN_EMAIL || "yared.abegaz@gmail.com").toLowerCase().trim();
   if (!configuredAdminEmail) {
     return res.status(401).json({
@@ -75,33 +45,38 @@ router.post("/google-auth", async (req, res) => {
     });
   }
 
-  // Require Authorization: Bearer <Firebase ID token>
+  // Extract ID token from Authorization: Bearer <idToken> or body
+  let idToken = "";
   const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    return res.status(401).json({
-      error: "Unauthorized: Missing Authorization Bearer token."
-    });
+  if (authHeader && authHeader.startsWith("Bearer ")) {
+    idToken = authHeader.substring(7).trim();
+  } else if (req.body?.idToken) {
+    idToken = String(req.body.idToken).trim();
+  } else if (req.body?.token) {
+    idToken = String(req.body.token).trim();
   }
 
-  const idToken = authHeader.substring(7).trim();
   if (!idToken) {
     return res.status(401).json({
-      error: "Unauthorized: Empty Bearer token."
+      error: "Unauthorized: Missing Google ID token."
     });
   }
 
-  let verifiedUser = await verifyUserToken(idToken);
-  if (!verifiedUser || !verifiedUser.email) {
+  const verifiedUser = await verifyUserToken(idToken);
+  if (!verifiedUser) {
     return res.status(401).json({
-      error: "Invalid or expired Firebase ID token."
+      error: "Invalid or expired session. Please sign in with Google again."
     });
   }
 
-  // Require verified email matching ADMIN_EMAIL
   const userEmail = (verifiedUser.email || "").toLowerCase().trim();
-  const isAdmin = userEmail === configuredAdminEmail;
+  const isAuthorizedAdmin = (
+    verifiedUser.emailVerified === true &&
+    verifiedUser.provider === "google.com" &&
+    userEmail === configuredAdminEmail
+  );
 
-  if (isAdmin) {
+  if (isAuthorizedAdmin) {
     let token: string;
     try {
       token = createAdminToken(userEmail);
@@ -124,46 +99,10 @@ router.post("/google-auth", async (req, res) => {
     });
   }
 
+  // If not authorized admin, return { success: true, isAdmin: false }
   return res.json({
     success: true,
     isAdmin: false
-  });
-});
-
-// Also support POST /api/admin/login alias endpoint for admin session login
-router.post("/login", (req, res) => {
-  const pin = (req.body?.adminPin || req.body?.pin || "").toString().trim();
-
-  // Fail closed: reject all attempts if ADMIN_PIN is not configured
-  if (!process.env.ADMIN_PIN || !process.env.ADMIN_PIN.trim()) {
-    return res.status(401).json({
-      error: "Admin PIN authentication is not configured on the server."
-    });
-  }
-
-  if (pin && verifyAdminPin(pin)) {
-    let token: string;
-    try {
-      token = createAdminToken("pin-admin");
-    } catch (err: any) {
-      return res.status(401).json({
-        error: err.message || "Failed to create admin session token."
-      });
-    }
-    return res.json({
-      success: true,
-      token,
-      message: "Admin session authenticated successfully.",
-      adminUser: {
-        role: "admin",
-        name: "Buna Store Admin",
-        email: "pin-admin"
-      }
-    });
-  }
-
-  res.status(401).json({
-    error: "Invalid Admin PIN."
   });
 });
 
@@ -289,6 +228,38 @@ router.post("/predictions/void", adminAuthMiddleware, async (req, res) => {
     res.json({ success: true, match: result.match, message: "Match marked as void." });
   } catch (err: any) {
     res.status(500).json({ error: getSafeErrorMessage(err, "Failed to void match") });
+  }
+});
+
+router.delete("/predictions/matches/:id", adminAuthMiddleware, async (req, res) => {
+  try {
+    const matchId = req.params.id;
+    if (!matchId) {
+      return res.status(400).json({ error: "matchId is required" });
+    }
+    const result = await deletePredictionMatch(matchId);
+    if (!result.success) {
+      return res.status(result.status || 400).json({ error: result.error });
+    }
+    res.json({ success: true, message: "Match deleted successfully." });
+  } catch (err: any) {
+    res.status(500).json({ error: getSafeErrorMessage(err, "Failed to delete match") });
+  }
+});
+
+router.post("/predictions/matches/delete", adminAuthMiddleware, async (req, res) => {
+  try {
+    const matchId = req.body?.matchId || req.body?.id;
+    if (!matchId) {
+      return res.status(400).json({ error: "matchId is required" });
+    }
+    const result = await deletePredictionMatch(matchId);
+    if (!result.success) {
+      return res.status(result.status || 400).json({ error: result.error });
+    }
+    res.json({ success: true, message: "Match deleted successfully." });
+  } catch (err: any) {
+    res.status(500).json({ error: getSafeErrorMessage(err, "Failed to delete match") });
   }
 });
 

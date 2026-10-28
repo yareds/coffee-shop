@@ -32,6 +32,7 @@ export default function CommunityWall({ onPostAdded, authUser, onOpenLogin }: Co
 
   const [imageUrl, setImageUrl] = useState("");
   const [showForm, setShowForm] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
 
   // Check if current user is signed in
   const isLoggedIn = Boolean(
@@ -63,7 +64,6 @@ export default function CommunityWall({ onPostAdded, authUser, onOpenLogin }: Co
               id: docSnap.id,
               author: data.author || "Anonymous",
               authorUid: data.authorUid || undefined,
-              authorEmail: data.authorEmail || undefined,
               avatar: data.avatar || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100",
               text: data.text || "",
               date: data.date || "Just now",
@@ -93,8 +93,7 @@ export default function CommunityWall({ onPostAdded, authUser, onOpenLogin }: Co
         }
       },
       (error) => {
-        console.warn("Firestore snapshot error, falling back to server route:", error);
-        handleFirestoreError(error, OperationType.GET, "community_posts");
+        console.warn("Firestore snapshot note, falling back to server route:", error?.message || error);
         fetch("/api/wall")
           .then(res => res.json())
           .then(data => {
@@ -135,7 +134,6 @@ export default function CommunityWall({ onPostAdded, authUser, onOpenLogin }: Co
       await addDoc(collection(db, "community_posts"), {
         author: authorName,
         authorUid,
-        authorEmail,
         text: newPostText.trim(),
         rating: category === "review" ? rating : null,
         ratings: category === "review" ? ratings : null,
@@ -150,22 +148,19 @@ export default function CommunityWall({ onPostAdded, authUser, onOpenLogin }: Co
       setNewPostText("");
       setImageUrl("");
       setShowForm(false);
-      onPostAdded(15, "Contributed to Community Wall");
     } catch (err) {
       console.warn("Firestore post creation failed, trying server API fallback...", err);
       // Fallback to Express backend with authentication headers
       try {
+        const idToken = currentUser ? await currentUser.getIdToken().catch(() => "") : "";
         const res = await fetch("/api/wall", {
           method: "POST",
           headers: { 
             "Content-Type": "application/json",
-            "X-User-Email": authorEmail,
-            "X-User-Id": authorUid
+            ...(idToken ? { "Authorization": `Bearer ${idToken}` } : {})
           },
           body: JSON.stringify({
             author: authorName,
-            authorUid,
-            authorEmail,
             avatar,
             text: newPostText.trim(),
             rating: category === "review" ? rating : undefined,
@@ -179,12 +174,14 @@ export default function CommunityWall({ onPostAdded, authUser, onOpenLogin }: Co
           setNewPostText("");
           setImageUrl("");
           setShowForm(false);
+          setFormError(null);
           onPostAdded(15, "Contributed to Community Wall");
         } else if (data.error) {
-          alert(data.error);
+          setFormError(data.error);
         }
       } catch (e) {
         console.error("API fallback failed:", e);
+        setFormError("Failed to submit post. Please try again.");
       }
     } finally {
       setSubmitting(false);
@@ -347,6 +344,12 @@ export default function CommunityWall({ onPostAdded, authUser, onOpenLogin }: Co
                     +15 Loyalty Beans
                   </span>
                 </div>
+
+                {formError && (
+                  <div className="p-3 rounded-lg bg-red-950/50 border border-red-800/60 text-xs text-red-300">
+                    {formError}
+                  </div>
+                )}
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="flex flex-col gap-1">

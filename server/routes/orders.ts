@@ -8,6 +8,7 @@ import {
   addActivityLog,
   Order
 } from "../db.js";
+import { handleServerError } from "../middleware.js";
 
 const router = Router();
 
@@ -89,7 +90,7 @@ router.post("/", async (req, res) => {
       message: `Order #${order.id.slice(-4)} placed successfully! Brewing in progress.`
     });
   } catch (err: any) {
-    res.status(500).json({ error: err.message || "Failed to place order" });
+    handleServerError(res, err, "Order Create Error");
   }
 });
 
@@ -155,7 +156,7 @@ router.post("/custom", async (req, res) => {
       message: stamped ? `Successfully brewed! Passport stamped for ${region}!` : "Enjoy your custom hand-brew!"
     });
   } catch (err: any) {
-    res.status(500).json({ error: err.message || "Failed to place custom brew order" });
+    handleServerError(res, err, "Custom Order Error");
   }
 });
 
@@ -173,7 +174,7 @@ router.get("/", async (req, res) => {
       orders: userOrders
     });
   } catch (err: any) {
-    res.status(500).json({ error: err.message || "Failed to fetch orders" });
+    handleServerError(res, err, "Fetch Orders Error");
   }
 });
 

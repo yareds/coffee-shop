@@ -24,17 +24,16 @@ export default function LoginModal({
   onLoginSuccess,
   deviceId
 }: LoginModalProps) {
-  const [authMode, setAuthMode] = useState<"google" | "email_login" | "email_signup" | "pin_login">("google");
+  const [authMode, setAuthMode] = useState<"google" | "email_login" | "email_signup">("google");
   const [userLoading, setUserLoading] = useState(false);
   const [userError, setUserError] = useState<string | null>(null);
   const [isUnauthorizedDomain, setIsUnauthorizedDomain] = useState(false);
   const [copiedDomain, setCopiedDomain] = useState(false);
 
-  // Email/password & PIN form state
+  // Email/password form state
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [adminPin, setAdminPin] = useState("2026");
 
   React.useEffect(() => {
     if (isOpen) {
@@ -74,11 +73,14 @@ export default function LoginModal({
         if (adminData?.isAdmin && adminData?.token) {
           isAdmin = true;
           localStorage.setItem("buna_admin_token", adminData.token);
+          localStorage.removeItem("buna_admin_pin");
         } else {
           localStorage.removeItem("buna_admin_token");
+          localStorage.removeItem("buna_admin_pin");
         }
       } else {
         localStorage.removeItem("buna_admin_token");
+        localStorage.removeItem("buna_admin_pin");
       }
     } catch (e) {
       console.warn("Admin token verification error:", e);
@@ -95,10 +97,10 @@ export default function LoginModal({
           uid: fbUser.uid,
           name: targetUsername,
           email: userEmail,
-          role: isAdmin ? "admin" : "user",
-          points: 240,
-          stampsCount: 7,
-          beansCount: 3,
+          role: "user",
+          points: 0,
+          stampsCount: 0,
+          beansCount: 0,
           stampedRegions: []
         });
       }
@@ -192,38 +194,6 @@ export default function LoginModal({
       } else {
         setUserError(err.message || "Authentication failed. Please try again.");
       }
-    } finally {
-      setUserLoading(false);
-    }
-  };
-
-  const handlePinAuth = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!adminPin.trim()) return;
-    setUserLoading(true);
-    setUserError(null);
-    try {
-      const res = await fetch("/api/owner/verify-pin", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ adminPin: adminPin.trim() })
-      });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        localStorage.setItem("buna_admin_token", data.token);
-        localStorage.setItem("buna_admin_pin", adminPin.trim());
-        const adminUser: AuthUser = {
-          role: "admin",
-          name: data.adminUser?.name || "Buna Store Admin",
-          email: data.adminUser?.email || "pin-admin"
-        };
-        onLoginSuccess(adminUser, "👑 Staff Admin authenticated! Admin operations unlocked.");
-        onClose();
-      } else {
-        setUserError(data.error || "Invalid Admin PIN.");
-      }
-    } catch (err: any) {
-      setUserError("Error verifying PIN.");
     } finally {
       setUserLoading(false);
     }

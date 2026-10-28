@@ -12,6 +12,7 @@ export default function RouletteGame({ loyalty, onBeanRolled }: {
 
   const [cracking, setCracking] = useState(false);
   const [crackedPrize, setCrackedPrize] = useState<any | null>(null);
+  const [beanError, setBeanError] = useState<string | null>(null);
 
   // 1. Coffee Roulette spinning
   const handleSpinRoulette = () => {
@@ -38,6 +39,7 @@ export default function RouletteGame({ loyalty, onBeanRolled }: {
 
     setCracking(true);
     setCrackedPrize(null);
+    setBeanError(null);
 
     const devId = localStorage.getItem("buna_device_id") || "default-device";
 
@@ -54,11 +56,12 @@ export default function RouletteGame({ loyalty, onBeanRolled }: {
           setCracking(false);
         }, 1200); // crack animation 1.2s
       } else {
-        alert(data.error);
+        setBeanError(data.error || "Failed to crack bean.");
         setCracking(false);
       }
     } catch (e) {
       console.error(e);
+      setBeanError("Error connecting to bean rewards service.");
       setCracking(false);
     }
   };
@@ -179,6 +182,12 @@ export default function RouletteGame({ loyalty, onBeanRolled }: {
             )}
           </AnimatePresence>
         </div>
+
+        {beanError && (
+          <p className="text-xs text-red-400 text-center mb-3 bg-red-950/40 border border-red-800/50 py-1.5 px-3 rounded-lg">
+            {beanError}
+          </p>
+        )}
 
         <button
           onClick={handleCrackBean}

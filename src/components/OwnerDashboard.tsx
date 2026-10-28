@@ -57,6 +57,12 @@ export default function OwnerDashboard() {
   ]);
   const [saturdayWarning, setSaturdayWarning] = useState<string | null>(null);
 
+  // In-app confirmation states (replaces window.confirm for iframe sandbox safety)
+  const [matchToDelete, setMatchToDelete] = useState<{ id: string; desc: string; entriesCount?: number } | null>(null);
+  const [isDeletingMatch, setIsDeletingMatch] = useState(false);
+  const [matchToVoid, setMatchToVoid] = useState<{ id: string; desc: string } | null>(null);
+  const [isVoidingMatch, setIsVoidingMatch] = useState(false);
+
   // Settlement & Correction state
   const [settlingMatch, setSettlingMatch] = useState<any | null>(null);
   const [settleHomeGoals, setSettleHomeGoals] = useState(0);
@@ -155,11 +161,10 @@ export default function OwnerDashboard() {
 
   const getAdminHeaders = () => {
     const token = localStorage.getItem("buna_admin_token") || "";
-    const pin = localStorage.getItem("buna_admin_pin") || "";
     return {
       "Content-Type": "application/json",
       "X-Admin-Token": token,
-      "X-Admin-Pin": pin
+      ...(token ? { "Authorization": `Bearer ${token}` } : {})
     };
   };
 
@@ -294,11 +299,13 @@ export default function OwnerDashboard() {
       .then(res => res.json())
       .then(data => {
         if (data.success) {
-          showFeedback(data.message || "Match saved successfully!");
+          showFeedback(data.message || (editingMatchId ? "Match fixture updated successfully!" : "New match fixture scheduled and published!"));
           setEditingMatchId(null);
           setHomeTeam("");
           setAwayTeam("");
           setKickoffDateTime("");
+          setPrizeDesc("");
+          setSaturdayWarning(null);
           setPlayersList([{ name: "", team: "home" }, { name: "", team: "away" }]);
           loadDashboardData();
         } else {
@@ -312,11 +319,6 @@ export default function OwnerDashboard() {
   };
 
   const handleStartEditMatch = (m: any) => {
-    const isPast = new Date() >= new Date(m.kickoffAt);
-    if (isPast) {
-      showFeedback("Cannot edit match after kickoff has occurred.");
-      return;
-    }
     setEditingMatchId(m.id);
     setHomeTeam(m.homeTeam);
     setAwayTeam(m.awayTeam);
@@ -329,27 +331,100 @@ export default function OwnerDashboard() {
       setKickoffDateTime("");
     }
     setPrizeDesc(m.prizeDescription || "");
-    setPlayersList(m.players && m.players.length > 0 ? m.players : [{ name: "", team: "home" }]);
+    setPlayersList(m.players && m.players.length > 0 ? m.players : [{ name: "", team: "home" }, { name: "", team: "away" }]);
+    
+    // Smoothly scroll to the editor form
+    window.scrollTo({ top: 380, behavior: 'smooth' });
+    showFeedback(`Editing "${m.homeTeam} vs ${m.awayTeam}". Make your changes and click Update Match Fixture.`);
+  };
+
+  const handleOpenDeleteConfirm = (match: { id: string; homeTeam?: string; awayTeam?: string; desc?: string; stats?: any }) => {
+    const desc = match.desc || `${match.homeTeam || ''} vs ${match.awayTeam || ''}`.trim() || "Selected Match";
+    setMatchToDelete({
+      id: match.id,
+      desc,
+      entriesCount: match.stats?.totalEntries || 0
+    });
+  };
+
+  const handleDeleteMatch = (matchId: string, matchDesc: string) => {
+    handleOpenDeleteConfirm({ id: matchId, desc: matchDesc });
+  };
+
+  const confirmExecuteDeleteMatch = async () => {
+    if (!matchToDelete) return;
+    setIsDeletingMatch(true);
+
+    try {
+      const res = await fetch(`/api/owner/predictions/matches/${matchToDelete.id}`, {
+        method: "DELETE",
+        headers: getAdminHeaders()
+      });
+      const data = await res.json();
+      if (data.success) {
+        showFeedback(`Match fixture "${matchToDelete.desc}" and associated entries deleted successfully.`);
+        if (editingMatchId === matchToDelete.id) {
+          setEditingMatchId(null);
+          setHomeTeam("");
+          setAwayTeam("");
+          setKickoffDateTime("");
+          setPrizeDesc("");
+          setSaturdayWarning(null);
+          setPlayersList([{ name: "", team: "home" }, { name: "", team: "away" }]);
+        }
+        setMatchToDelete(null);
+        loadDashboardData();
+        if (predictionView === "customer_predictions") {
+          loadAllPredictions();
+        }
+      } else {
+        showFeedback(data.error || "Failed to delete match.");
+      }
+    } catch (e) {
+      console.error(e);
+      showFeedback("Error deleting match.");
+    } finally {
+      setIsDeletingMatch(false);
+    }
+  };
+
+  const handleOpenVoidConfirm = (matchId: string, desc?: string) => {
+    const m = matches.find(match => match.id === matchId);
+    const matchDesc = desc || (m ? `${m.homeTeam} vs ${m.awayTeam}` : "this match");
+    setMatchToVoid({ id: matchId, desc: matchDesc });
   };
 
   const handleVoidMatch = (matchId: string) => {
-    if (!confirm("Are you sure you want to mark this match as void? All predictions will be cancelled.")) return;
+    handleOpenVoidConfirm(matchId);
+  };
 
-    fetch("/api/owner/predictions/void", {
-      method: "POST",
-      headers: getAdminHeaders(),
-      body: JSON.stringify({ matchId })
-    })
-      .then(res => res.json())
-      .then(data => {
-        if (data.success) {
-          showFeedback("Match has been marked as void.");
-          loadDashboardData();
-        } else {
-          showFeedback(data.error || "Failed to void match.");
+  const confirmExecuteVoidMatch = async () => {
+    if (!matchToVoid) return;
+    setIsVoidingMatch(true);
+
+    try {
+      const res = await fetch("/api/owner/predictions/void", {
+        method: "POST",
+        headers: getAdminHeaders(),
+        body: JSON.stringify({ matchId: matchToVoid.id })
+      });
+      const data = await res.json();
+      if (data.success) {
+        showFeedback(`Match "${matchToVoid.desc}" has been marked as void.`);
+        setMatchToVoid(null);
+        loadDashboardData();
+        if (predictionView === "customer_predictions") {
+          loadAllPredictions();
         }
-      })
-      .catch(e => console.error(e));
+      } else {
+        showFeedback(data.error || "Failed to void match.");
+      }
+    } catch (e) {
+      console.error(e);
+      showFeedback("Error marking match as void.");
+    } finally {
+      setIsVoidingMatch(false);
+    }
   };
 
   const handleOpenSettle = (m: any, isCorrection: boolean = false) => {
@@ -402,11 +477,6 @@ export default function OwnerDashboard() {
   };
 
   const handleTogglePrizeCollected = (matchId: string, uid: string, current: boolean, winnerName?: string, winnerEmail?: string) => {
-    const actionText = !current ? "mark prize as collected" : "revert prize collected status";
-    const userLabel = winnerName ? ` for ${winnerName}${winnerEmail ? ` (${winnerEmail})` : ""}` : "";
-    if (!window.confirm(`Are you sure you want to ${actionText}${userLabel}?`)) {
-      return;
-    }
     fetch("/api/owner/predictions/collect-prize", {
       method: "POST",
       headers: getAdminHeaders(),
@@ -630,18 +700,26 @@ export default function OwnerDashboard() {
                     <span>{editingMatchId ? "Edit Match Fixture" : "Schedule New Weekly Prediction Match"}</span>
                   </h3>
                   {editingMatchId && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setEditingMatchId(null);
-                        setHomeTeam("");
-                        setAwayTeam("");
-                        setKickoffDateTime("");
-                      }}
-                      className="text-stone-400 hover:text-white text-xs cursor-pointer"
-                    >
-                      Cancel Edit
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-amber-400/20 text-amber-300 font-bold border border-amber-400/30">
+                        Editing: {homeTeam || "Home"} vs {awayTeam || "Away"}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingMatchId(null);
+                          setHomeTeam("");
+                          setAwayTeam("");
+                          setKickoffDateTime("");
+                          setPrizeDesc("");
+                          setSaturdayWarning(null);
+                          setPlayersList([{ name: "", team: "home" }, { name: "", team: "away" }]);
+                        }}
+                        className="px-2.5 py-1 rounded bg-stone-800 hover:bg-stone-700 text-stone-200 text-xs font-medium cursor-pointer transition-colors"
+                      >
+                        Cancel Edit
+                      </button>
+                    </div>
                   )}
                 </div>
 
@@ -903,7 +981,7 @@ export default function OwnerDashboard() {
                           </span>
                         </div>
 
-                        <div className="flex items-center gap-2">
+                        <div className="flex flex-wrap items-center gap-2">
                           <button
                             type="button"
                             onClick={() => toggleViewEntries(m.id)}
@@ -917,27 +995,29 @@ export default function OwnerDashboard() {
                             <span>Entries ({m.stats?.totalEntries || 0})</span>
                           </button>
 
+                          <button
+                            type="button"
+                            onClick={() => handleStartEditMatch(m)}
+                            className="px-3 py-1 rounded-lg bg-[#224e38] hover:bg-[#295a3d] text-stone-200 text-xs font-medium cursor-pointer transition-colors"
+                            title="Edit match fixture details"
+                          >
+                            Edit
+                          </button>
+
                           {m.status === "scheduled" && (
                             <>
                               <button
                                 type="button"
-                                onClick={() => handleStartEditMatch(m)}
-                                disabled={isPastKickoff}
-                                className="px-3 py-1 rounded-lg bg-[#224e38] hover:bg-[#295a3d] disabled:opacity-40 text-stone-200 text-xs font-medium cursor-pointer"
-                              >
-                                Edit
-                              </button>
-                              <button
-                                type="button"
                                 onClick={() => handleOpenSettle(m, false)}
-                                className="px-3 py-1 rounded-lg bg-[#2d824d] hover:bg-[#226a3f] text-white text-xs font-bold cursor-pointer"
+                                className="px-3 py-1 rounded-lg bg-[#2d824d] hover:bg-[#226a3f] text-white text-xs font-bold cursor-pointer transition-colors"
                               >
                                 Settle Result
                               </button>
                               <button
                                 type="button"
                                 onClick={() => handleVoidMatch(m.id)}
-                                className="px-3 py-1 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 text-xs font-medium cursor-pointer"
+                                className="px-3 py-1 rounded-lg bg-stone-700/60 hover:bg-stone-700 text-stone-300 text-xs font-medium cursor-pointer transition-colors"
+                                title="Mark match as void"
                               >
                                 Void
                               </button>
@@ -947,12 +1027,22 @@ export default function OwnerDashboard() {
                             <button
                               type="button"
                               onClick={() => handleOpenSettle(m, true)}
-                              className="px-3 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-xs font-bold cursor-pointer flex items-center gap-1"
+                              className="px-3 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-xs font-bold cursor-pointer flex items-center gap-1 transition-colors"
                             >
                               <History size={13} />
                               <span>Correct Result</span>
                             </button>
                           )}
+
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteMatch(m.id, `${m.homeTeam} vs ${m.awayTeam}`)}
+                            className="px-2.5 py-1 rounded-lg bg-red-500/15 hover:bg-red-500/25 border border-red-500/30 text-red-300 text-xs font-medium cursor-pointer flex items-center gap-1 transition-all"
+                            title="Permanently delete this match fixture"
+                          >
+                            <Trash2 size={13} className="text-red-400" />
+                            <span>Delete</span>
+                          </button>
                         </div>
                       </div>
 
@@ -1859,6 +1949,142 @@ export default function OwnerDashboard() {
               </a>
             </div>
 
+          </div>
+        </div>
+      )}
+
+      {/* Delete Match Fixture In-App Modal */}
+      {matchToDelete && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
+          <div className="bg-stone-900 border border-red-500/40 rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-4">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-xl bg-red-500/10 border border-red-500/20 flex items-center justify-center text-red-400 shrink-0 mt-0.5">
+                <Trash2 size={20} />
+              </div>
+              <div className="flex-1">
+                <h3 className="text-lg font-bold text-white">Permanently Delete Match?</h3>
+                <p className="text-xs text-stone-400 mt-0.5">This action cannot be undone.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => { if (!isDeletingMatch) setMatchToDelete(null); }}
+                disabled={isDeletingMatch}
+                className="text-stone-400 hover:text-white cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="bg-stone-950/80 rounded-xl p-3.5 border border-stone-800 text-sm space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-stone-400 uppercase font-mono tracking-wider">Fixture</span>
+                <span className="text-xs font-mono text-stone-400">ID: {matchToDelete.id.slice(0, 8)}...</span>
+              </div>
+              <p className="font-bold text-white text-base">{matchToDelete.desc}</p>
+              {matchToDelete.entriesCount !== undefined && matchToDelete.entriesCount > 0 ? (
+                <div className="p-2.5 rounded-lg bg-red-950/40 border border-red-800/60 text-xs text-red-300 flex items-start gap-2">
+                  <AlertTriangle size={15} className="text-red-400 shrink-0 mt-0.5" />
+                  <span>
+                    Warning: <strong>{matchToDelete.entriesCount} customer prediction{matchToDelete.entriesCount === 1 ? '' : 's'}</strong> submitted for this match fixture will also be removed.
+                  </span>
+                </div>
+              ) : (
+                <p className="text-xs text-stone-400">
+                  This fixture and any associated prediction records will be permanently removed.
+                </p>
+              )}
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-2 border-t border-stone-800">
+              <button
+                type="button"
+                onClick={() => { if (!isDeletingMatch) setMatchToDelete(null); }}
+                disabled={isDeletingMatch}
+                className="px-4 py-2 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-300 text-xs font-semibold transition cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmExecuteDeleteMatch}
+                disabled={isDeletingMatch}
+                className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-bold flex items-center gap-2 transition cursor-pointer shadow-lg shadow-red-950/50 disabled:opacity-50"
+              >
+                {isDeletingMatch ? (
+                  <>
+                    <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    <span>Deleting...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 size={14} />
+                    <span>Yes, Permanently Delete</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Void Match Fixture In-App Modal */}
+      {matchToVoid && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
+          <div className="bg-stone-900 border border-amber-500/40 rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-4">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 shrink-0 mt-0.5">
+                <AlertTriangle size={20} />
+              </div>
+              <div className="flex-1">
+                <h3 className="text-lg font-bold text-white">Mark Match as Void?</h3>
+                <p className="text-xs text-stone-400 mt-0.5">Postpone or cancel this fixture.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => { if (!isVoidingMatch) setMatchToVoid(null); }}
+                disabled={isVoidingMatch}
+                className="text-stone-400 hover:text-white cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="bg-stone-950/80 rounded-xl p-3.5 border border-stone-800 text-sm space-y-1">
+              <span className="text-xs text-stone-400 uppercase font-mono tracking-wider">Fixture</span>
+              <p className="font-bold text-white text-base">{matchToVoid.desc}</p>
+              <p className="text-xs text-stone-300 mt-1">
+                Marking this match as void will close predictions and cancel scoring.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-2 border-t border-stone-800">
+              <button
+                type="button"
+                onClick={() => { if (!isVoidingMatch) setMatchToVoid(null); }}
+                disabled={isVoidingMatch}
+                className="px-4 py-2 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-300 text-xs font-semibold transition cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmExecuteVoidMatch}
+                disabled={isVoidingMatch}
+                className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold flex items-center gap-2 transition cursor-pointer shadow-lg disabled:opacity-50"
+              >
+                {isVoidingMatch ? (
+                  <>
+                    <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    <span>Voiding...</span>
+                  </>
+                ) : (
+                  <>
+                    <Check size={14} />
+                    <span>Confirm Void Match</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -110,7 +110,6 @@ export interface WallPost {
   id: string;
   author: string;
   authorUid?: string;
-  authorEmail?: string;
   avatar: string;
   text: string;
   rating: number;
@@ -1159,58 +1158,30 @@ export function formatWinnerName(name: string): string {
   return `${firstName} ${lastInitial}.`;
 }
 
-export async function verifyUserToken(token: string): Promise<{ uid: string; displayName: string; email?: string } | null> {
+export async function verifyUserToken(token: string): Promise<{
+  uid: string;
+  displayName: string;
+  email?: string | null;
+  emailVerified: boolean;
+  provider?: string | null;
+} | null> {
+  if (!token || typeof token !== "string") return null;
   const auth = getAdminAuth();
-  if (auth) {
-    try {
-      const decoded = await auth.verifyIdToken(token);
-      return {
-        uid: decoded.uid,
-        displayName: decoded.name || decoded.email?.split("@")[0] || "Explorer",
-        email: decoded.email
-      };
-    } catch (e: any) {
-      console.warn("[verifyUserToken] Admin verifyIdToken note:", e?.message);
-    }
+  if (!auth) {
+    return null;
   }
-
-  // Fallback JWT token validation for Google/Firebase ID tokens:
-  // Verifies format, expiration (with 5-minute skew tolerance), and standard Google/Firebase identity claims
   try {
-    const parts = token.split(".");
-    if (parts.length === 3) {
-      const payload = JSON.parse(Buffer.from(parts[1], "base64url").toString("utf8"));
-      const nowSec = Math.floor(Date.now() / 1000);
-
-      // Check expiry (reject if expired, allowing 300s clock skew)
-      if (typeof payload.exp === "number" && payload.exp < nowSec - 300) {
-        console.warn("[verifyUserToken] Session token expired at:", payload.exp, "current:", nowSec);
-        return null;
-      }
-
-      const uid = payload.sub || payload.user_id;
-      const targetProj = process.env.FIREBASE_PROJECT_ID || "buna-ethiopia";
-      const isGoogleIssuer =
-        !payload.iss ||
-        payload.iss.startsWith("https://securetoken.google.com/") ||
-        payload.iss === `https://securetoken.google.com/${targetProj}` ||
-        payload.iss === "https://accounts.google.com" ||
-        payload.iss === "accounts.google.com" ||
-        payload.iss.includes("google.com");
-
-      if (uid && isGoogleIssuer) {
-        return {
-          uid,
-          displayName: payload.name || payload.displayName || payload.email?.split("@")[0] || "Explorer",
-          email: payload.email
-        };
-      }
-    }
+    const decoded = await auth.verifyIdToken(token);
+    return {
+      uid: decoded.uid,
+      displayName: decoded.name || decoded.email?.split("@")[0] || "Explorer",
+      email: decoded.email || null,
+      emailVerified: decoded.email_verified === true,
+      provider: decoded.firebase?.sign_in_provider || null
+    };
   } catch (err: any) {
-    console.warn("[verifyUserToken] Fallback parse error:", err?.message);
+    return null;
   }
-
-  return null;
 }
 
 export async function getAllPredictionMatches(): Promise<PredictionMatch[]> {
@@ -1339,7 +1310,7 @@ export async function savePredictionMatch(matchData: {
 
   const prizeDescription = (typeof matchData.prizeDescription === "string" && matchData.prizeDescription.trim())
     ? matchData.prizeDescription.trim()
-    : "1 Year of Free Buna Single-Origin Coffee";
+    : "1 Year of Free Hattrick Cafe Single-Origin Coffee & Official Leather Football";
 
   let warning: string | undefined;
   if (kickoffDate.getUTCDay() !== 6) {
@@ -1356,20 +1327,9 @@ export async function savePredictionMatch(matchData: {
     if (!existing) {
       return { success: false, status: 404, error: "Match not found to edit." };
     }
-    const now = new Date();
-    if (now >= new Date(existing.kickoffAt)) {
-      return { success: false, status: 400, error: "Cannot edit match after kickoff." };
-    }
   }
 
-  // Reject creating a second non-void match with the same weekKey (409)
-  const allMatches = await getAllPredictionMatches();
-  const duplicateWeek = allMatches.some(m => m.id !== matchId && m.weekKey === weekKey && m.status !== "void");
-  if (duplicateWeek) {
-    return { success: false, status: 409, error: `A match for week ${weekKey} already exists. Only one non-void match per week is permitted.` };
-  }
-
-  // Don't let editing turn a "void" or "settled" match back into "scheduled", and don't overwrite createdAt
+  // Preserve existing status if settled or void, otherwise default to scheduled
   const status: "scheduled" | "settled" | "void" = existing && (existing.status === "void" || existing.status === "settled")
     ? existing.status
     : "scheduled";
@@ -1411,6 +1371,35 @@ export async function savePredictionMatch(matchData: {
   }
 
   return { success: true, match, warning };
+}
+
+export async function deletePredictionMatch(matchId: string): Promise<{ success: boolean; status?: number; error?: string }> {
+  getAdminDb();
+  const match = await getPredictionMatch(matchId);
+  if (!match) {
+    return { success: false, status: 404, error: "Match not found." };
+  }
+
+  const hasCredentials = checkHasLikelyCredentials();
+  if (hasCredentials && isFirestoreAvailable && COLLECTIONS) {
+    try {
+      await COLLECTIONS.predictionMatches.doc(matchId).delete();
+      // Also delete associated predictions for this match
+      const predsSnap = await COLLECTIONS.predictions.where("matchId", "==", matchId).get();
+      if (!predsSnap.empty) {
+        const batch = COLLECTIONS.predictions.firestore.batch();
+        predsSnap.docs.forEach(docSnap => batch.delete(docSnap.ref));
+        await batch.commit();
+      }
+    } catch (err) {
+      logFirestoreFallback("deletePredictionMatch", err);
+    }
+  }
+
+  memoryState.predictionMatches = memoryState.predictionMatches.filter(m => m.id !== matchId);
+  memoryState.predictions = memoryState.predictions.filter(p => p.matchId !== matchId);
+
+  return { success: true };
 }
 
 export async function voidPredictionMatch(matchId: string): Promise<{ success: boolean; status?: number; match?: PredictionMatch; error?: string }> {
@@ -2693,7 +2682,6 @@ export async function getWallPosts(): Promise<WallPost[]> {
             id: doc.id,
             author: data.author || "Anonymous",
             authorUid: data.authorUid || undefined,
-            authorEmail: data.authorEmail || undefined,
             avatar: data.avatar || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=60",
             text: data.text || "",
             rating: Number(data.rating) || 5,
@@ -2718,7 +2706,6 @@ export async function getWallPosts(): Promise<WallPost[]> {
 export async function addWallPost(post: {
   author?: string;
   authorUid?: string;
-  authorEmail?: string;
   avatar?: string;
   text: string;
   rating?: number;
@@ -2732,7 +2719,6 @@ export async function addWallPost(post: {
     id,
     author: post.author || "Coffee Lover",
     authorUid: post.authorUid,
-    authorEmail: post.authorEmail,
     avatar: post.avatar || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=60",
     text: post.text,
     rating: post.rating ?? 5,
@@ -2750,7 +2736,6 @@ export async function addWallPost(post: {
       await COLLECTIONS.communityPosts.doc(id).set({
         author: newPost.author,
         authorUid: newPost.authorUid || null,
-        authorEmail: newPost.authorEmail || null,
         avatar: newPost.avatar,
         text: newPost.text,
         rating: newPost.rating,

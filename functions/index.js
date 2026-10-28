@@ -5,4 +5,4 @@ process.env.NODE_ENV = process.env.NODE_ENV || "production";
 
 const { app } = require("./bundled-server.cjs");
 
-exports.api = onRequest({ region: "us-central1" }, app);
+exports.api = onRequest({ region: "us-central1", maxInstances: 10 }, app);
