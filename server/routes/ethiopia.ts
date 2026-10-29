@@ -1,6 +1,6 @@
 import { Router } from "express";
-import { getProfile, saveProfile, addActivityLog } from "../db.js";
-import { handleServerError } from "../middleware.js";
+import { getOrCreateUserProfile, saveUserProfile, awardUserPointsWithDailyCap, addActivityLog } from "../db.js";
+import { requireUser, rateLimitPerUser, handleServerError } from "../middleware.js";
 
 const router = Router();
 
@@ -83,8 +83,13 @@ router.get("/regions", (req, res) => {
   res.json(ethiopianRegions);
 });
 
-router.post("/stamp", async (req, res) => {
+router.post("/stamp", requireUser, rateLimitPerUser(15, 60000), async (req, res) => {
   try {
+    const user = (req as any).user;
+    if (!user || !user.uid) {
+      return res.status(401).json({ error: "Unauthorized: Valid user token required." });
+    }
+
     const { regionName } = req.body;
     const region = ethiopianRegions.find(r => r.name.toLowerCase() === (regionName || "").toLowerCase());
 
@@ -92,10 +97,10 @@ router.post("/stamp", async (req, res) => {
       return res.status(404).json({ error: "Region not found" });
     }
 
-    const profile = await getProfile(req);
+    const profile = await getOrCreateUserProfile(user);
     if (!profile.passportStamps.includes(region.name)) {
       profile.passportStamps.push(region.name);
-      profile.points += 50;
+      awardUserPointsWithDailyCap(user.uid, profile, 50);
 
       if (!profile.unlockedBadges.includes(region.badgeName)) {
         profile.unlockedBadges.push(region.badgeName);
@@ -106,10 +111,10 @@ router.post("/stamp", async (req, res) => {
         !profile.unlockedBadges.includes("Ethiopian Coffee Master")
       ) {
         profile.unlockedBadges.push("Ethiopian Coffee Master");
-        profile.points += 200;
+        awardUserPointsWithDailyCap(user.uid, profile, 200);
       }
 
-      await saveProfile(profile);
+      await saveUserProfile(user.uid, profile);
       await addActivityLog(`Stamped coffee passport for ${region.name}! (+50 pts)`);
     }
 

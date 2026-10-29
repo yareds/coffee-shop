@@ -24,38 +24,38 @@ export const HattrickLogo: React.FC<HattrickLogoProps> = ({
   // Exact sizing mappings preserving the 1:1.24 aspect ratio of the official emblem (326x406)
   const iconSizeClass = {
     xs: "w-6 h-7.5",
-    sm: "w-8 h-10",
-    md: "w-10 h-12.5 sm:w-11 sm:h-14",
-    lg: "w-16 h-20 sm:w-20 sm:h-25",
-    xl: "w-24 h-30 sm:w-32 sm:h-40",
-    hero: "w-36 h-45 sm:w-48 sm:h-60"
+    sm: "w-7 h-9 sm:w-8 sm:h-10",
+    md: "w-8 h-10 sm:w-11 sm:h-14",
+    lg: "w-10 h-12.5 sm:w-20 sm:h-25",
+    xl: "w-16 h-20 sm:w-32 sm:h-40",
+    hero: "w-24 h-30 sm:w-48 sm:h-60"
   }[size];
 
   const titleSizeClass = {
-    xs: "text-xs tracking-[0.04em]",
-    sm: "text-sm sm:text-base tracking-[0.04em]",
-    md: "text-base sm:text-lg lg:text-xl tracking-[0.05em]",
-    lg: "text-xl sm:text-2xl lg:text-3xl tracking-[0.05em]",
-    xl: "text-2xl sm:text-4xl lg:text-5xl tracking-[0.05em]",
-    hero: "text-3xl sm:text-5xl lg:text-6xl tracking-[0.05em]"
+    xs: "text-[10px] tracking-[0.03em]",
+    sm: "text-xs sm:text-base tracking-[0.04em]",
+    md: "text-xs sm:text-lg lg:text-xl tracking-[0.03em] sm:tracking-[0.05em]",
+    lg: "text-sm sm:text-2xl lg:text-3xl tracking-[0.03em] sm:tracking-[0.05em]",
+    xl: "text-xl sm:text-4xl lg:text-5xl tracking-[0.04em] sm:tracking-[0.05em]",
+    hero: "text-2xl sm:text-5xl lg:text-6xl tracking-[0.04em] sm:tracking-[0.05em]"
   }[size];
 
   const amharicSizeClass = {
-    xs: "text-xs sm:text-sm font-extrabold",
-    sm: "text-sm sm:text-lg font-extrabold",
-    md: "text-lg sm:text-2xl lg:text-3xl font-black",
-    lg: "text-2xl sm:text-3xl lg:text-4xl font-black",
-    xl: "text-3xl sm:text-5xl lg:text-6xl font-black",
-    hero: "text-4xl sm:text-6xl lg:text-7xl font-black"
+    xs: "text-[10px] sm:text-sm font-extrabold",
+    sm: "text-xs sm:text-lg font-extrabold",
+    md: "text-xs sm:text-2xl lg:text-3xl font-black",
+    lg: "text-sm sm:text-3xl lg:text-4xl font-black",
+    xl: "text-2xl sm:text-5xl lg:text-6xl font-black",
+    hero: "text-3xl sm:text-6xl lg:text-7xl font-black"
   }[size];
 
   const locationSizeClass = {
-    xs: "text-[7px] tracking-[0.12em]",
-    sm: "text-[8px] sm:text-[9px] tracking-[0.14em]",
-    md: "text-[9px] sm:text-[10px] tracking-[0.16em]",
-    lg: "text-xs sm:text-sm tracking-[0.18em]",
-    xl: "text-sm sm:text-base tracking-[0.2em]",
-    hero: "text-base sm:text-lg tracking-[0.22em]"
+    xs: "text-[6px] tracking-[0.1em]",
+    sm: "text-[7px] sm:text-[9px] tracking-[0.12em]",
+    md: "text-[7px] sm:text-[10px] tracking-[0.12em] sm:tracking-[0.16em]",
+    lg: "text-[9px] sm:text-sm tracking-[0.14em] sm:tracking-[0.18em]",
+    xl: "text-xs sm:text-base tracking-[0.16em] sm:tracking-[0.2em]",
+    hero: "text-sm sm:text-lg tracking-[0.18em] sm:tracking-[0.22em]"
   }[size];
 
   // Exact Emblem Artwork from attached image
@@ -129,26 +129,26 @@ export const HattrickLogo: React.FC<HattrickLogoProps> = ({
   return (
     <div
       onClick={onClick}
-      className={`flex items-center gap-3 sm:gap-4 group cursor-pointer select-none shrink-0 ${className}`}
+      className={`flex items-center gap-2 sm:gap-3.5 group cursor-pointer select-none min-w-0 ${className}`}
     >
       {BeanIcon}
 
-      <div className="flex flex-col justify-center">
+      <div className="flex flex-col justify-center min-w-0">
         {/* ROW 1: English Title */}
-        <h1 className={`font-black font-sans uppercase transition-colors group-hover:text-amber-400 leading-tight ${titleSizeClass} ${textColorTitle}`}>
+        <h1 className={`font-black font-sans uppercase transition-colors group-hover:text-amber-400 leading-tight truncate ${titleSizeClass} ${textColorTitle}`}>
           HATTRICK COFFEE
         </h1>
 
         {/* ROW 2: Amharic Script + Hawassa Location Side by Side */}
-        <div className="flex items-center gap-2 sm:gap-3.5 mt-0.5 sm:mt-1">
+        <div className="flex items-center gap-1.5 sm:gap-3 mt-0.5 min-w-0">
           {showAmharic && (
-            <span className={`font-black font-serif tracking-normal leading-none ${amharicSizeClass} ${textColorAmharic}`}>
+            <span className={`font-black font-serif tracking-normal leading-none shrink-0 ${amharicSizeClass} ${textColorAmharic}`}>
               ሃትሪክ ቡና
             </span>
           )}
 
           {showLocation && (
-            <span className={`font-bold font-sans uppercase leading-none ${locationSizeClass} ${textColorLocation}`}>
+            <span className={`hidden sm:inline font-bold font-sans uppercase leading-none truncate ${locationSizeClass} ${textColorLocation}`}>
               HAWASSA, ETHIOPIA
             </span>
           )}

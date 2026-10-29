@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { getEvents, bookEvent } from "../db.js";
-import { handleServerError } from "../middleware.js";
+import { requireUser, rateLimitPerUser, handleServerError } from "../middleware.js";
 
 const router = Router();
 
@@ -13,10 +13,21 @@ router.get("/", async (req, res) => {
   }
 });
 
-router.post("/book", async (req, res) => {
+router.post("/book", requireUser, rateLimitPerUser(15, 60000), async (req, res) => {
   try {
-    const { eventId, userEmail } = req.body;
-    const result = await bookEvent(eventId, userEmail);
+    const user = (req as any).user;
+    if (!user || !user.uid) {
+      return res.status(401).json({ error: "Unauthorized: Valid user token required." });
+    }
+
+    const { eventId } = req.body;
+    if (!eventId || typeof eventId !== "string") {
+      return res.status(400).json({ error: "eventId is required." });
+    }
+
+    // Ignore client-provided userEmail; use verified identity from token
+    const bookerIdentity = user.email || user.displayName || "Verified User";
+    const result = await bookEvent(eventId, bookerIdentity);
 
     if (result.success) {
       res.json({ success: true, events: result.events });

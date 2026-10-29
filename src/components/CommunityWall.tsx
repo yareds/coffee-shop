@@ -6,7 +6,7 @@ import { db, handleFirestoreError, OperationType, auth } from "../lib/firebase";
 import { collection, onSnapshot, query, orderBy, addDoc, updateDoc, doc, increment } from "firebase/firestore";
 
 interface CommunityWallProps {
-  onPostAdded: (points: number, reason: string) => void;
+  onPostAdded?: () => void;
   authUser?: AuthUser;
   onOpenLogin?: () => void;
 }
@@ -175,7 +175,7 @@ export default function CommunityWall({ onPostAdded, authUser, onOpenLogin }: Co
           setImageUrl("");
           setShowForm(false);
           setFormError(null);
-          onPostAdded(15, "Contributed to Community Wall");
+          if (onPostAdded) onPostAdded();
         } else if (data.error) {
           setFormError(data.error);
         }

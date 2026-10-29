@@ -151,6 +151,7 @@ export interface OrderItem {
 
 export interface Order {
   id: string;
+  uid?: string;
   customerName: string;
   customerEmail: string;
   deviceId: string;
@@ -159,6 +160,49 @@ export interface Order {
   status: "Received" | "Brewing" | "Ready" | "Completed";
   createdAt: string;
   isCustomBrew?: boolean;
+}
+
+export interface RewardItem {
+  id: string;
+  name: string;
+  cost: number;
+  description: string;
+}
+
+export const REWARDS_CATALOG: Record<string, RewardItem> = {
+  reward_pastry: {
+    id: "reward_pastry",
+    name: "Free Cardamom Pastry",
+    cost: 50,
+    description: "Get a freshly baked pastry of your choice to pair with your morning cup."
+  },
+  reward_espresso: {
+    id: "reward_espresso",
+    name: "Free Double Espresso Upgrade",
+    cost: 80,
+    description: "Add a double shot of rare single-origin Harrar espresso to any custom beverage order."
+  },
+  reward_cupping_kit: {
+    id: "reward_cupping_kit",
+    name: "Whole Bean Cupping Kit (250g)",
+    cost: 200,
+    description: "Receive a physical retail bag of medium-roasted washed Yirgacheffe coffee beans delivered to your address."
+  }
+};
+
+export interface RedemptionRecord {
+  id: string;
+  uid: string;
+  rewardId: string;
+  rewardName: string;
+  cost: number;
+  status: "pending" | "fulfilled";
+  shortCode: string;
+  customerName?: string;
+  customerEmail?: string;
+  createdAt: string;
+  fulfilledAt?: string;
+  fulfilledBy?: string;
 }
 
 export interface LoyaltyProfile {
@@ -202,6 +246,7 @@ export interface AppState {
   predictions: Prediction[];
   registeredUsers: RegisteredUser[];
   orders: Order[];
+  redemptions: RedemptionRecord[];
   shopStats: ShopStats;
 }
 
@@ -504,6 +549,7 @@ export const INITIAL_STATE: AppState = {
     { id: "u2", name: "Martha Tesfaye", email: "martha@buna.com", phone: "+15550199222", hasSpun: true, hasCollected: true, prize: "Yirgacheffe Pour Over", date: "2026-07-20 10:15 AM", deviceId: "device_2" }
   ],
   orders: [],
+  redemptions: [],
   shopStats: {
     revenue: 85000,
     orders: 98,
@@ -619,6 +665,7 @@ export type CollectionsMap = {
   registeredUsers: CollectionReference;
   orders: CollectionReference;
   loyaltyProfiles: CollectionReference;
+  redemptions: CollectionReference;
   shopStats: CollectionReference;
   communityPosts: CollectionReference;
   predictionMatches: CollectionReference;
@@ -700,6 +747,7 @@ export function getAdminDb(): Firestore | null {
         registeredUsers: adminDb.collection("registeredUsers"),
         orders: adminDb.collection("orders"),
         loyaltyProfiles: adminDb.collection("loyaltyProfiles"),
+        redemptions: adminDb.collection("redemptions"),
         shopStats: adminDb.collection("shopStats"),
         communityPosts: adminDb.collection("community_posts"),
         predictionMatches: adminDb.collection("predictionMatches"),
@@ -2452,7 +2500,7 @@ export async function resetUserSpin(id: string, userDeviceId?: string): Promise<
 // ==========================================
 // 6. Orders API Helpers
 // ==========================================
-export async function getOrders(filter?: { email?: string; deviceId?: string }): Promise<Order[]> {
+export async function getOrders(filter?: { uid?: string; email?: string; deviceId?: string }): Promise<Order[]> {
   getAdminDb();
   if (isFirestoreAvailable && COLLECTIONS) {
     try {
@@ -2468,7 +2516,9 @@ export async function getOrders(filter?: { email?: string; deviceId?: string }):
   }
 
   let list = memoryState.orders || [];
-  if (filter?.email) {
+  if (filter?.uid) {
+    list = list.filter(o => o.uid === filter.uid);
+  } else if (filter?.email) {
     const em = filter.email.toLowerCase();
     list = list.filter(o => (o.customerEmail && o.customerEmail.toLowerCase() === em) || (filter.deviceId && o.deviceId === filter.deviceId));
   } else if (filter?.deviceId) {
@@ -2566,105 +2616,221 @@ export async function addActivityLog(text: string): Promise<void> {
 }
 
 // ==========================================
-// 8. Loyalty Profiles API Helpers
+// 8. Loyalty Profiles & Redemptions API Helpers (Keyed Strictly by Verified UID)
 // ==========================================
-export function getLoyaltyProfileKey(req: any): { key: string; userEmail: string; deviceId: string } {
-  const deviceId = (req.query?.deviceId || req.headers?.["x-device-id"] || req.body?.deviceId || "default-device") as string;
-  const rawEmail = (req.headers?.["x-user-email"] || req.query?.userEmail || req.body?.userEmail || req.body?.email || "") as string;
-  const userEmail = rawEmail.trim().toLowerCase();
-  const sanitizedEmail = userEmail.replace(/\//g, "_");
 
-  const key = userEmail ? `user_${sanitizedEmail}` : `dev_${deviceId}`;
-  return { key, userEmail, deviceId };
+export function createDefaultProfile(uid = "", customerName = "Explorer", customerEmail = ""): LoyaltyProfile {
+  return {
+    ...INITIAL_STATE.loyaltyProfile,
+    points: 0,
+    level: "Bronze",
+    streak: 1,
+    beansCount: 0,
+    stampsCount: 0,
+    passportStamps: [],
+    unlockedBadges: [],
+    referralCode: "BUNA-" + (uid ? uid.slice(-6).toUpperCase() : "GUEST"),
+    referralsCount: 0,
+    signedUp: Boolean(uid),
+    hasSpunWheel: false,
+    customerName,
+    customerEmail,
+    rafflePrize: "",
+    hasCollectedPrize: false,
+    deviceId: "verified-user"
+  };
 }
 
-export async function getProfile(req: any): Promise<LoyaltyProfile> {
+export async function getUserProfileByUid(uid: string): Promise<LoyaltyProfile | null> {
+  if (!uid || typeof uid !== "string") return null;
   getAdminDb();
-  const { key, userEmail, deviceId } = getLoyaltyProfileKey(req);
 
   let profile: LoyaltyProfile | null = null;
-
   if (isFirestoreAvailable && COLLECTIONS) {
     try {
-      const doc = await COLLECTIONS.loyaltyProfiles.doc(key).get();
+      const doc = await COLLECTIONS.loyaltyProfiles.doc(uid).get();
       if (doc.exists) {
         profile = doc.data() as LoyaltyProfile;
       }
     } catch (err) {
-      isFirestoreAvailable = false;
-      logFirestoreFallback("getProfile", err);
+      if (!checkHasLikelyCredentials()) {
+        isFirestoreAvailable = false;
+      }
+      logFirestoreFallback("getUserProfileByUid", err);
     }
   }
 
   if (!profile) {
-    profile = memoryState.loyaltyProfiles?.[key] || null;
+    profile = memoryState.loyaltyProfiles?.[uid] || null;
   }
 
-  // If still not created, initialize default profile
-  if (!profile) {
-    profile = {
-      ...INITIAL_STATE.loyaltyProfile,
-      referralCode: "BUNA-" + (userEmail ? userEmail.slice(0, 4).toUpperCase() : deviceId.slice(-6).toUpperCase()),
-      deviceId,
-      customerEmail: userEmail || "",
-      customerName: userEmail ? userEmail.split("@")[0] : "",
-      signedUp: false,
-      hasSpunWheel: false,
-      rafflePrize: "",
-      hasCollectedPrize: false
-    };
-  }
-
-  // Sync profile with registeredUsers record if exists
-  if (userEmail) {
-    const users = await getRegisteredUsers();
-    const regUser = users.find(u => u.email && u.email.toLowerCase() === userEmail);
-    if (regUser) {
-      profile.signedUp = true;
-      if (regUser.name) profile.customerName = regUser.name;
-      if (regUser.email) profile.customerEmail = regUser.email;
-      if (regUser.phone) profile.customerPhone = regUser.phone;
-      profile.hasSpunWheel = regUser.hasSpun || false;
-      profile.rafflePrize = regUser.prize || profile.rafflePrize || "";
-      profile.hasCollectedPrize = regUser.hasCollected || false;
-    }
-  }
-
-  // Cache in memory
-  if (!memoryState.loyaltyProfiles) memoryState.loyaltyProfiles = {};
-  memoryState.loyaltyProfiles[key] = profile;
-
-  // Persist to Firestore
-  if (isFirestoreAvailable && COLLECTIONS) {
-    try {
-      await COLLECTIONS.loyaltyProfiles.doc(key).set(profile, { merge: true });
-    } catch (err) {
-      isFirestoreAvailable = false;
-      logFirestoreFallback("saveProfile on getProfile", err);
-    }
-  }
-
+  // NOTE: A GET must NEVER create or persist a profile!
   return profile;
 }
 
-export async function saveProfile(profile: LoyaltyProfile): Promise<void> {
+export async function getOrCreateUserProfile(user: { uid: string; displayName?: string | null; email?: string | null }): Promise<LoyaltyProfile> {
+  const existing = await getUserProfileByUid(user.uid);
+  if (existing) {
+    return existing;
+  }
+  // Initialize in memory for write action
+  const fresh = createDefaultProfile(
+    user.uid,
+    user.displayName || (user.email ? user.email.split("@")[0] : "Explorer"),
+    user.email || ""
+  );
+  return fresh;
+}
+
+export async function saveUserProfile(uid: string, profile: LoyaltyProfile): Promise<void> {
+  if (!uid || typeof uid !== "string") return;
   getAdminDb();
-  const userEmail = (profile.customerEmail || "").trim().toLowerCase();
-  const deviceId = profile.deviceId || "default-device";
-  const sanitizedEmail = userEmail.replace(/\//g, "_");
-  const key = userEmail ? `user_${sanitizedEmail}` : `dev_${deviceId}`;
 
   if (!memoryState.loyaltyProfiles) memoryState.loyaltyProfiles = {};
-  memoryState.loyaltyProfiles[key] = profile;
+  memoryState.loyaltyProfiles[uid] = profile;
 
   if (isFirestoreAvailable && COLLECTIONS) {
     try {
-      await COLLECTIONS.loyaltyProfiles.doc(key).set(profile, { merge: true });
+      await COLLECTIONS.loyaltyProfiles.doc(uid).set(profile, { merge: true });
     } catch (err) {
-      isFirestoreAvailable = false;
-      logFirestoreFallback("saveProfile", err);
+      if (!checkHasLikelyCredentials()) {
+        isFirestoreAvailable = false;
+      }
+      logFirestoreFallback("saveUserProfile", err);
     }
   }
+}
+
+function calculateTier(points: number): "Bronze" | "Silver" | "Gold" | "Platinum" | "Diamond" | "Master" {
+  if (points >= 2000) return "Diamond";
+  if (points >= 1000) return "Platinum";
+  if (points >= 500) return "Gold";
+  if (points >= 200) return "Silver";
+  return "Bronze";
+}
+
+// Daily points tracker per user to enforce daily cap
+const dailyPointsMap = new Map<string, { date: string; points: number }>();
+
+export function awardUserPointsWithDailyCap(
+  uid: string,
+  profile: LoyaltyProfile,
+  desiredPoints: number,
+  dailyCap = 500
+): number {
+  if (desiredPoints <= 0) return 0;
+  const today = new Date().toISOString().split("T")[0];
+  let record = dailyPointsMap.get(uid);
+  if (!record || record.date !== today) {
+    record = { date: today, points: 0 };
+    dailyPointsMap.set(uid, record);
+  }
+  const remainingCap = Math.max(0, dailyCap - record.points);
+  const actualPoints = Math.min(desiredPoints, remainingCap);
+  if (actualPoints > 0) {
+    record.points += actualPoints;
+    profile.points = (profile.points || 0) + actualPoints;
+    profile.level = calculateTier(profile.points);
+  }
+  return actualPoints;
+}
+
+export function generateRedemptionShortCode(): string {
+  const chars = "23456789ABCDEFGHJKMNPQRSTUVWXYZ";
+  let code = "RDM-";
+  for (let i = 0; i < 6; i++) {
+    code += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return code;
+}
+
+export async function createRedemptionRecord(data: Omit<RedemptionRecord, "id">): Promise<RedemptionRecord> {
+  getAdminDb();
+  const id = "rdm_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2, 6);
+  const record: RedemptionRecord = {
+    ...data,
+    id
+  };
+
+  if (!memoryState.redemptions) memoryState.redemptions = [];
+  memoryState.redemptions.unshift(record);
+
+  if (isFirestoreAvailable && COLLECTIONS) {
+    try {
+      await COLLECTIONS.redemptions.doc(id).set(record);
+    } catch (err) {
+      if (!checkHasLikelyCredentials()) {
+        isFirestoreAvailable = false;
+      }
+      logFirestoreFallback("createRedemptionRecord", err);
+    }
+  }
+
+  return record;
+}
+
+export async function getRedemptions(): Promise<RedemptionRecord[]> {
+  getAdminDb();
+  if (isFirestoreAvailable && COLLECTIONS) {
+    try {
+      const snap = await COLLECTIONS.redemptions.orderBy("createdAt", "desc").get();
+      if (!snap.empty) {
+        const list = snap.docs.map(d => d.data() as RedemptionRecord);
+        memoryState.redemptions = list;
+        return list;
+      }
+    } catch (err) {
+      if (!checkHasLikelyCredentials()) {
+        isFirestoreAvailable = false;
+      }
+      logFirestoreFallback("getRedemptions", err);
+    }
+  }
+  return memoryState.redemptions || [];
+}
+
+export async function fulfillRedemption(id: string, adminEmail: string): Promise<RedemptionRecord | null> {
+  getAdminDb();
+  if (!memoryState.redemptions) memoryState.redemptions = [];
+  const rec = memoryState.redemptions.find(r => r.id === id || r.shortCode === id);
+  if (!rec) return null;
+
+  rec.status = "fulfilled";
+  rec.fulfilledAt = new Date().toISOString();
+  rec.fulfilledBy = adminEmail;
+
+  if (isFirestoreAvailable && COLLECTIONS) {
+    try {
+      await COLLECTIONS.redemptions.doc(rec.id).set({
+        status: "fulfilled",
+        fulfilledAt: rec.fulfilledAt,
+        fulfilledBy: rec.fulfilledBy
+      }, { merge: true });
+    } catch (err) {
+      if (!checkHasLikelyCredentials()) {
+        isFirestoreAvailable = false;
+      }
+      logFirestoreFallback("fulfillRedemption", err);
+    }
+  }
+
+  return rec;
+}
+
+// Backward-compatible adapters
+export async function getProfile(req: any): Promise<LoyaltyProfile> {
+  const uid = (req as any)?.user?.uid;
+  if (uid) {
+    const existing = await getUserProfileByUid(uid);
+    if (existing) return existing;
+    return createDefaultProfile(uid, (req as any)?.user?.displayName, (req as any)?.user?.email);
+  }
+  return createDefaultProfile();
+}
+
+export async function saveProfile(profile: LoyaltyProfile): Promise<void> {
+  const uid = (profile as any).uid || (profile.customerEmail ? `u_${profile.customerEmail.toLowerCase().replace(/[^a-z0-9]/g, "_")}` : "guest");
+  await saveUserProfile(uid, profile);
 }
 
 // ==========================================
@@ -2788,6 +2954,7 @@ export async function getAppState(): Promise<AppState> {
     orders,
     shopStats,
     loyaltyProfile: memoryState.loyaltyProfile,
-    loyaltyProfiles: memoryState.loyaltyProfiles
+    loyaltyProfiles: memoryState.loyaltyProfiles,
+    redemptions: memoryState.redemptions || []
   };
 }

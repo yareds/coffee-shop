@@ -2,64 +2,115 @@ import { Router } from "express";
 import {
   createOrder,
   getOrders,
-  getProfile,
-  saveProfile,
+  getMenuItems,
+  getUserProfileByUid,
+  getOrCreateUserProfile,
+  saveUserProfile,
   updateShopStats,
   addActivityLog,
-  Order
+  awardUserPointsWithDailyCap,
+  Order,
+  OrderItem
 } from "../db.js";
-import { handleServerError } from "../middleware.js";
+import { requireUser, rateLimitPerUser, handleServerError } from "../middleware.js";
 
 const router = Router();
 
 // Region list for automatic passport stamping
 const ethiopianRegionNames = ["Yirgacheffe", "Sidama", "Guji", "Harrar", "Limu", "Jimma"];
 
-// Create an order (from Cart or Custom Drink Builder)
-router.post("/", async (req, res) => {
+// All orders routes strictly require an authenticated user
+router.use(requireUser);
+
+// 1. Fetch active user orders (strictly caller's orders only)
+router.get("/", async (req, res) => {
   try {
-    const { items, totalPrice, customerName, customerEmail, isCustomBrew, customDetails } = req.body;
+    const user = (req as any).user;
+    if (!user || !user.uid) {
+      return res.status(401).json({ error: "Unauthorized: Valid user token required." });
+    }
 
-    const profile = await getProfile(req);
-    const deviceId = profile.deviceId || (req.headers["x-device-id"] as string) || "guest";
-    const orderPrice = Number(totalPrice) || 150;
+    // Return ONLY the caller's verified orders, ignoring all client headers or query overrides
+    const userOrders = await getOrders({ uid: user.uid });
 
-    const order: Order = {
-      id: "ord_" + Date.now().toString(36),
-      customerName: customerName || profile.customerName || "Buna Guest",
-      customerEmail: customerEmail || profile.customerEmail || "",
-      deviceId,
-      items: Array.isArray(items)
-        ? items
-        : [
-            {
-              id: "custom_" + Date.now(),
-              name: customDetails?.region ? `Custom ${customDetails.region} Brew` : "Custom Jebena Coffee",
-              price: orderPrice,
-              quantity: 1,
-              details: customDetails
-                ? `${customDetails.roast || "Medium"} Roast, ${customDetails.method || "Jebena"}, ${customDetails.size || "Regular"}`
-                : undefined
-            }
-          ],
-      totalPrice: orderPrice,
-      status: "Brewing",
-      createdAt: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-      isCustomBrew: !!isCustomBrew
-    };
+    res.json({
+      success: true,
+      orders: userOrders
+    });
+  } catch (err: any) {
+    handleServerError(res, err, "Fetch Orders Error");
+  }
+});
 
-    await createOrder(order);
+// 2. Create an order (from Cart or Custom Drink Builder)
+// Recomputes the total on the server from menu item IDs and quantities (quantity 1-20, at most 20 items).
+// Ignores client totalPrice and item prices. Computes points and revenue from the server total.
+router.post("/", rateLimitPerUser(15, 60000), async (req, res) => {
+  try {
+    const user = (req as any).user;
+    if (!user || !user.uid) {
+      return res.status(401).json({ error: "Unauthorized: Valid user token required." });
+    }
 
-    // Update shop stats
-    await updateShopStats(stats => ({
-      ...stats,
-      revenue: stats.revenue + orderPrice,
-      orders: stats.orders + 1
-    }));
+    const { items, isCustomBrew, customDetails } = req.body;
 
-    // Award points & beans
-    const pointsEarned = Math.round(orderPrice * 0.2) + 20;
-    profile.points += pointsEarned;
+    if (!Array.isArray(items) || items.length === 0 || items.length > 20) {
+      return res.status(400).json({ error: "Order must contain between 1 and 20 items." });
+    }
+
+    // Fetch authoritative menu items from database
+    const allMenuItems = await getMenuItems();
+    const menuMap = new Map(allMenuItems.map(m => [m.id, m]));
+
+    let serverTotal = 0;
+    const validatedItems: OrderItem[] = [];
+
+    for (const rawItem of items) {
+      if (!rawItem || typeof rawItem !== "object") {
+        return res.status(400).json({ error: "Invalid item format." });
+      }
+
+      const quantity = Number(rawItem.quantity);
+      if (!Number.isInteger(quantity) || quantity < 1 || quantity > 20) {
+        return res.status(400).json({ error: "Quantity for each item must be an integer between 1 and 20." });
+      }
+
+      const itemId = String(rawItem.id || "").trim();
+      let authoritativePrice = 0;
+      let itemName = "";
+      let itemDetails = typeof rawItem.details === "string" ? rawItem.details.slice(0, 200) : undefined;
+
+      if (menuMap.has(itemId)) {
+        const official = menuMap.get(itemId)!;
+        authoritativePrice = official.price;
+        itemName = official.name;
+      } else if (itemId === "custom" || itemId.startsWith("custom_") || itemId.startsWith("c_") || isCustomBrew) {
+        // Fixed standard base price for custom traditional Jebena / hand brew
+        authoritativePrice = 150;
+        itemName = customDetails?.region ? `Custom ${customDetails.region} Brew` : "Custom Jebena Coffee";
+        if (customDetails) {
+          itemDetails = `${customDetails.roast || "Medium"} Roast, ${customDetails.method || "Jebena"}, ${customDetails.size || "Regular"}`;
+        }
+      } else {
+        return res.status(400).json({ error: `Unknown menu item ID: ${itemId}` });
+      }
+
+      serverTotal += authoritativePrice * quantity;
+      validatedItems.push({
+        id: itemId,
+        name: itemName,
+        price: authoritativePrice, // Server authoritative price
+        quantity,
+        details: itemDetails
+      });
+    }
+
+    // Ignore client totalPrice completely
+    const profile = await getOrCreateUserProfile(user);
+
+    // Compute points and revenue strictly from the server total
+    const pointsEarned = Math.round(serverTotal * 0.2) + 20;
+    awardUserPointsWithDailyCap(user.uid, profile, pointsEarned);
     profile.beansCount += 1;
 
     if (profile.stampsCount < 10) {
@@ -71,15 +122,37 @@ router.post("/", async (req, res) => {
     if (customDetails?.region && ethiopianRegionNames.includes(customDetails.region)) {
       if (!profile.passportStamps.includes(customDetails.region)) {
         profile.passportStamps.push(customDetails.region);
-        profile.points += 50;
+        awardUserPointsWithDailyCap(user.uid, profile, 50);
         stamped = true;
       }
     }
 
-    await saveProfile(profile);
+    await saveUserProfile(user.uid, profile);
+
+    const order: Order = {
+      id: "ord_" + Date.now().toString(36),
+      uid: user.uid,
+      customerName: user.displayName || (user.email ? user.email.split("@")[0] : "Buna Guest"),
+      customerEmail: user.email || "",
+      deviceId: "verified-user",
+      items: validatedItems,
+      totalPrice: serverTotal,
+      status: "Brewing",
+      createdAt: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      isCustomBrew: Boolean(isCustomBrew)
+    };
+
+    await createOrder(order);
+
+    // Update shop stats with real server total
+    await updateShopStats(stats => ({
+      ...stats,
+      revenue: stats.revenue + serverTotal,
+      orders: stats.orders + 1
+    }));
 
     await addActivityLog(
-      `New Order #${order.id.slice(-4)} placed by ${order.customerName} (${order.totalPrice} ETB). (+${pointsEarned} pts, +1 Bean)`
+      `New Order #${order.id.slice(-4)} placed by ${order.customerName} (${serverTotal} ETB). (+${pointsEarned} pts, +1 Bean)`
     );
 
     res.json({
@@ -94,20 +167,21 @@ router.post("/", async (req, res) => {
   }
 });
 
-// Custom coffee simulator shortcut route (compatible with existing frontend)
-router.post("/custom", async (req, res) => {
+// 3. Custom coffee simulator route (backward compatibility)
+router.post("/custom", rateLimitPerUser(15, 60000), async (req, res) => {
   try {
-    const { region, roast, method, price, size } = req.body;
-    const profile = await getProfile(req);
-    const orderPrice = Number(price) || 150;
+    const user = (req as any).user;
+    if (!user || !user.uid) {
+      return res.status(401).json({ error: "Unauthorized: Valid user token required." });
+    }
 
-    await updateShopStats(stats => ({
-      ...stats,
-      revenue: stats.revenue + orderPrice,
-      orders: stats.orders + 1
-    }));
+    const { region, roast, method, size } = req.body;
+    // Server-enforced base price for custom brew: 150 ETB (ignoring client price)
+    const serverPrice = 150;
 
-    profile.points += 25;
+    const profile = await getOrCreateUserProfile(user);
+
+    awardUserPointsWithDailyCap(user.uid, profile, 25);
     profile.beansCount += 1;
 
     if (profile.stampsCount < 10) {
@@ -117,32 +191,39 @@ router.post("/custom", async (req, res) => {
     let stamped = false;
     if (region && ethiopianRegionNames.includes(region) && !profile.passportStamps.includes(region)) {
       profile.passportStamps.push(region);
-      profile.points += 50;
+      awardUserPointsWithDailyCap(user.uid, profile, 50);
       stamped = true;
     }
 
     const order: Order = {
       id: "ord_" + Date.now().toString(36),
-      customerName: profile.customerName || "Custom Brewer",
-      customerEmail: profile.customerEmail || "",
-      deviceId: profile.deviceId || "guest",
+      uid: user.uid,
+      customerName: user.displayName || (user.email ? user.email.split("@")[0] : "Custom Brewer"),
+      customerEmail: user.email || "",
+      deviceId: "verified-user",
       items: [
         {
-          id: "c_" + Date.now(),
+          id: "custom_" + Date.now(),
           name: `Custom ${region || "Buna"} Hand-Brew`,
-          price: orderPrice,
+          price: serverPrice,
           quantity: 1,
           details: `${roast || "Medium"} Roast, ${method || "Jebena"}, ${size || "Regular"}`
         }
       ],
-      totalPrice: orderPrice,
+      totalPrice: serverPrice,
       status: "Brewing",
       createdAt: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
       isCustomBrew: true
     };
 
     await createOrder(order);
-    await saveProfile(profile);
+    await saveUserProfile(user.uid, profile);
+
+    await updateShopStats(stats => ({
+      ...stats,
+      revenue: stats.revenue + serverPrice,
+      orders: stats.orders + 1
+    }));
 
     await addActivityLog(
       `New Custom Brew Order #${order.id.slice(-4)}: ${region || "Buna"} (${size || "Regular"}). (+1 Virtual Bean)`
@@ -157,24 +238,6 @@ router.post("/custom", async (req, res) => {
     });
   } catch (err: any) {
     handleServerError(res, err, "Custom Order Error");
-  }
-});
-
-// Fetch active user orders
-router.get("/", async (req, res) => {
-  try {
-    const profile = await getProfile(req);
-    const deviceId = profile.deviceId || (req.headers["x-device-id"] as string);
-    const email = profile.customerEmail;
-
-    const userOrders = await getOrders({ email, deviceId });
-
-    res.json({
-      success: true,
-      orders: userOrders
-    });
-  } catch (err: any) {
-    handleServerError(res, err, "Fetch Orders Error");
   }
 });
 

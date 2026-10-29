@@ -442,20 +442,20 @@ export default function MatchDayPrize({ authUser, onOpenLogin }: MatchDayPrizePr
     <div className="flex flex-col gap-6">
       
       {/* 1. HERO BANNER: ETHIOPIAN COFFEE X MATCHDAY PREDICTION */}
-      <div className="bg-[#1a3e29] p-6 rounded-2xl border border-[#295a3d] relative overflow-hidden">
+      <div className="bg-[#1a3e29] p-4 sm:p-6 rounded-2xl border border-[#295a3d] relative overflow-hidden w-full max-w-full">
         {/* Pitch Lines Motif Accent */}
         <div className="absolute -right-12 -top-12 w-48 h-48 rounded-full border-2 border-[#42bd6c]/15 pointer-events-none" />
         <div className="absolute right-12 -top-6 w-24 h-24 rounded-full border border-[#42bd6c]/10 pointer-events-none" />
 
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-5 relative z-10">
-          <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-            <HattrickLogo size="lg" theme="dark" showLocation={false} className="shrink-0" />
-            <div className="border-t sm:border-t-0 sm:border-l border-amber-500/20 pt-3 sm:pt-0 sm:pl-4">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 sm:gap-5 relative z-10 w-full">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 min-w-0">
+            <HattrickLogo size="md" theme="dark" showLocation={false} className="shrink-0" />
+            <div className="border-t sm:border-t-0 sm:border-l border-amber-500/20 pt-2.5 sm:pt-0 sm:pl-4 min-w-0">
               <div className="flex items-center gap-2 mb-1">
-                <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[10px] font-mono font-bold uppercase tracking-wider">
+                <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[9px] sm:text-[10px] font-mono font-bold uppercase tracking-wider">
                   WEEKLY PREDICTION SYSTEM
                 </span>
-                <span className="text-[11px] font-mono text-stone-300">
+                <span className="text-[10px] sm:text-[11px] font-mono text-stone-300">
                   Hawassa, Ethiopia
                 </span>
               </div>
@@ -466,20 +466,20 @@ export default function MatchDayPrize({ authUser, onOpenLogin }: MatchDayPrizePr
           </div>
 
           <div className="flex flex-col sm:items-end gap-2 shrink-0">
-            <div className="px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-mono font-bold flex items-center gap-1.5">
+            <div className="px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[11px] sm:text-xs font-mono font-bold flex items-center gap-1.5 self-start sm:self-auto">
               <CheckCircle2 size={13} />
               <span>100% Free Entry • No Order Required</span>
             </div>
             {auth.currentUser ? (
-              <span className="text-xs text-stone-300 font-mono flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                <span>Signed in as <strong>{auth.currentUser.displayName || auth.currentUser.email}</strong></span>
+              <span className="text-xs text-stone-300 font-mono flex items-center gap-1.5 truncate max-w-xs">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+                <span className="truncate">Signed in as <strong className="text-white">{auth.currentUser.displayName || auth.currentUser.email}</strong></span>
               </span>
             ) : (
               <button
                 type="button"
                 onClick={onOpenLogin}
-                className="px-3 py-1.5 rounded-xl bg-white hover:bg-stone-100 text-stone-900 font-bold text-xs shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
+                className="px-3 py-1.5 rounded-xl bg-white hover:bg-stone-100 text-stone-900 font-bold text-xs shadow-md transition-all flex items-center gap-1.5 cursor-pointer self-start sm:self-auto"
               >
                 <User size={13} />
                 <span>Register / Sign In</span>
@@ -489,11 +489,11 @@ export default function MatchDayPrize({ authUser, onOpenLogin }: MatchDayPrizePr
         </div>
 
         {/* Sub-Navigation Tabs */}
-        <div className="flex items-center gap-2 mt-5 pt-4 border-t border-[#295a3d]/60 text-xs font-mono">
+        <div className="flex items-center gap-1.5 sm:gap-2 mt-4 sm:mt-5 pt-3 sm:pt-4 border-t border-[#295a3d]/60 text-xs font-mono overflow-x-auto scrollbar-none pb-1 w-full max-w-full">
           <button
             type="button"
             onClick={() => setActiveTab("predict")}
-            className={`px-3 py-1.5 rounded-lg font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+            className={`px-3 py-1.5 rounded-lg font-bold flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap shrink-0 ${
               activeTab === "predict"
                 ? "bg-[#2d824d] text-white shadow-sm"
                 : "bg-[#122b1c] text-stone-300 hover:text-white border border-[#295a3d]"
@@ -506,7 +506,7 @@ export default function MatchDayPrize({ authUser, onOpenLogin }: MatchDayPrizePr
           <button
             type="button"
             onClick={() => setActiveTab("my_predictions")}
-            className={`px-3 py-1.5 rounded-lg font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+            className={`px-3 py-1.5 rounded-lg font-bold flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap shrink-0 ${
               activeTab === "my_predictions"
                 ? "bg-[#2d824d] text-white shadow-sm"
                 : "bg-[#122b1c] text-stone-300 hover:text-white border border-[#295a3d]"
@@ -524,7 +524,7 @@ export default function MatchDayPrize({ authUser, onOpenLogin }: MatchDayPrizePr
           <button
             type="button"
             onClick={() => setActiveTab("all_fixtures")}
-            className={`px-3 py-1.5 rounded-lg font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+            className={`px-3 py-1.5 rounded-lg font-bold flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap shrink-0 ${
               activeTab === "all_fixtures"
                 ? "bg-[#2d824d] text-white shadow-sm"
                 : "bg-[#122b1c] text-stone-300 hover:text-white border border-[#295a3d]"

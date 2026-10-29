@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { Sparkles, Play, HelpCircle, Gift, Check, Coffee } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { LoyaltyProfile } from "../types";
+import { auth } from "../lib/firebase";
 
 export default function RouletteGame({ loyalty, onBeanRolled }: { 
   loyalty: LoyaltyProfile; 
@@ -41,12 +42,19 @@ export default function RouletteGame({ loyalty, onBeanRolled }: {
     setCrackedPrize(null);
     setBeanError(null);
 
-    const devId = localStorage.getItem("buna_device_id") || "default-device";
-
     try {
+      const idToken = await auth.currentUser?.getIdToken();
+      if (!idToken) {
+        setBeanError("Please sign in with Google to crack lucky beans.");
+        setCracking(false);
+        return;
+      }
+
       const response = await fetch("/api/loyalty/lucky-bean", { 
         method: "POST",
-        headers: { "X-Device-ID": devId }
+        headers: {
+          "Authorization": `Bearer ${idToken}`
+        }
       });
       const data = await response.json();
       if (data.success) {

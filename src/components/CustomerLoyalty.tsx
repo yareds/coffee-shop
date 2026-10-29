@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { Award, Compass, Heart, BookOpen, Gift, MapPin, Zap, Flame, Calendar, Sparkles, Coffee } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { LoyaltyProfile, PassportRegion } from "../types";
+import { auth } from "../lib/firebase";
 
 export default function CustomerLoyalty({ 
   loyalty, 
@@ -11,51 +12,73 @@ export default function CustomerLoyalty({
   onRedeemReward: (updatedLoyalty: LoyaltyProfile, msg: string) => void;
 }) {
   const [redeeming, setRedeeming] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const handleRedeemFreeDrink = async () => {
     if (loyalty.stampsCount < 10) return;
     setRedeeming(true);
-
-    const devId = localStorage.getItem("buna_device_id") || "default-device";
+    setErrorMsg(null);
 
     try {
+      const idToken = await auth.currentUser?.getIdToken();
+      if (!idToken) {
+        setErrorMsg("Please sign in with Google to redeem your free drink.");
+        setRedeeming(false);
+        return;
+      }
+
       const response = await fetch("/api/loyalty/redeem-free-drink", { 
         method: "POST",
-        headers: { "X-Device-ID": devId }
+        headers: {
+          "Authorization": `Bearer ${idToken}`
+        }
       });
       const data = await response.json();
       if (data.success) {
         onRedeemReward(data.loyalty, "Redeemed 10 Stamps for a FREE Signature Specialty Coffee!");
+      } else {
+        setErrorMsg(data.error || "Failed to redeem free drink.");
       }
       setRedeeming(false);
     } catch (e) {
       console.error(e);
+      setErrorMsg("Failed to connect to rewards server.");
       setRedeeming(false);
     }
   };
 
-  const handleExchangePoints = async (pointsCost: number, prizeTitle: string) => {
-    if (loyalty.points < pointsCost) return;
+  const handleExchangePoints = async (rewardId: string) => {
     setRedeeming(true);
-
-    const devId = localStorage.getItem("buna_device_id") || "default-device";
+    setErrorMsg(null);
 
     try {
+      const idToken = await auth.currentUser?.getIdToken();
+      if (!idToken) {
+        setErrorMsg("Please sign in with Google to exchange loyalty points.");
+        setRedeeming(false);
+        return;
+      }
+
       const response = await fetch("/api/loyalty/exchange-points", {
         method: "POST",
         headers: { 
           "Content-Type": "application/json",
-          "X-Device-ID": devId
+          "Authorization": `Bearer ${idToken}`
         },
-        body: JSON.stringify({ pointsCost, prizeTitle })
+        body: JSON.stringify({ rewardId })
       });
       const data = await response.json();
       if (data.success) {
-        onRedeemReward(data.loyalty, `Exchanged ${pointsCost} points for ${prizeTitle}! Check your email for details.`);
+        const itemTitle = data.redemption?.rewardName || "Reward";
+        const code = data.redemption?.shortCode || "";
+        onRedeemReward(data.loyalty, `Exchanged points for ${itemTitle}! Claim reference: ${code}`);
+      } else {
+        setErrorMsg(data.error || "Failed to exchange points.");
       }
       setRedeeming(false);
     } catch (e) {
       console.error(e);
+      setErrorMsg("Failed to connect to points exchange.");
       setRedeeming(false);
     }
   };
@@ -197,9 +220,9 @@ export default function CustomerLoyalty({
             <div className="flex justify-between items-center mt-4 pt-3 border-t border-[#1d432d]">
               <span className="font-mono text-xs text-stone-500">Cost: 50 points</span>
               <button
-                onClick={() => handleExchangePoints(50, "Free Cardamom Pastry Coupon")}
+                onClick={() => handleExchangePoints("reward_pastry")}
                 disabled={loyalty.points < 50 || redeeming}
-                className="px-3 py-1.5 rounded-lg bg-[#22683e]/30 border border-[#22683e] hover:bg-[#22683e] hover:text-white text-xs text-[#38a15b] hover:text-white font-bold transition-all"
+                className="px-3 py-1.5 rounded-lg bg-[#22683e]/30 border border-[#22683e] hover:bg-[#22683e] hover:text-white text-xs text-[#38a15b] hover:text-white font-bold transition-all cursor-pointer disabled:opacity-40"
               >
                 Exchange
               </button>
@@ -215,9 +238,9 @@ export default function CustomerLoyalty({
             <div className="flex justify-between items-center mt-4 pt-3 border-t border-[#1d432d]">
               <span className="font-mono text-xs text-stone-500">Cost: 80 points</span>
               <button
-                onClick={() => handleExchangePoints(80, "Free Double Shot Upgrade")}
+                onClick={() => handleExchangePoints("reward_espresso")}
                 disabled={loyalty.points < 80 || redeeming}
-                className="px-3 py-1.5 rounded-lg bg-[#22683e]/30 border border-[#22683e] hover:bg-[#22683e] hover:text-white text-xs text-[#38a15b] hover:text-white font-bold transition-all"
+                className="px-3 py-1.5 rounded-lg bg-[#22683e]/30 border border-[#22683e] hover:bg-[#22683e] hover:text-white text-xs text-[#38a15b] hover:text-white font-bold transition-all cursor-pointer disabled:opacity-40"
               >
                 Exchange
               </button>
@@ -233,9 +256,9 @@ export default function CustomerLoyalty({
             <div className="flex justify-between items-center mt-4 pt-3 border-t border-[#1d432d]">
               <span className="font-mono text-xs text-stone-500">Cost: 200 points</span>
               <button
-                onClick={() => handleExchangePoints(200, "Whole Bean Cupping Bag (250g)")}
+                onClick={() => handleExchangePoints("reward_cupping_kit")}
                 disabled={loyalty.points < 200 || redeeming}
-                className="px-3 py-1.5 rounded-lg bg-[#22683e]/30 border border-[#22683e] hover:bg-[#22683e] hover:text-white text-xs text-[#38a15b] hover:text-white font-bold transition-all"
+                className="px-3 py-1.5 rounded-lg bg-[#22683e]/30 border border-[#22683e] hover:bg-[#22683e] hover:text-white text-xs text-[#38a15b] hover:text-white font-bold transition-all cursor-pointer disabled:opacity-40"
               >
                 Exchange
               </button>
@@ -243,6 +266,12 @@ export default function CustomerLoyalty({
           </div>
 
         </div>
+
+        {errorMsg && (
+          <div className="mt-4 p-3 rounded-xl bg-red-500/15 border border-red-500/30 text-red-300 text-xs font-mono">
+            {errorMsg}
+          </div>
+        )}
       </div>
 
     </div>

@@ -23,7 +23,7 @@ export const HattrickHeroBanner: React.FC<HattrickHeroBannerProps> = ({
       {/* ======================================================== */}
       {/* 1. CINEMATIC 16:9 HERO BANNER DISPLAY                   */}
       {/* ======================================================== */}
-      <div className="relative w-full aspect-[16/9] min-h-[380px] sm:min-h-[460px] md:min-h-[520px] lg:min-h-[580px] flex items-center justify-center overflow-hidden bg-black">
+      <div className="relative w-full aspect-[16/9] min-h-[220px] sm:min-h-[380px] md:min-h-[480px] lg:min-h-[560px] flex items-center justify-center overflow-hidden bg-black">
         
         {/* Master Realistic Graphic Asset */}
         <img
@@ -40,10 +40,10 @@ export const HattrickHeroBanner: React.FC<HattrickHeroBannerProps> = ({
         <div className="absolute -bottom-16 -right-16 w-56 h-56 rounded-full bg-blue-500/20 blur-3xl pointer-events-none" />
 
         {/* Top Header Badge Overlay */}
-        <div className="absolute top-3 sm:top-5 inset-x-3 sm:inset-x-6 flex items-center justify-between pointer-events-none">
-          <div className="inline-flex items-center gap-1.5 sm:gap-2 px-3 py-1 sm:px-4 sm:py-1.5 rounded-full bg-black/75 border border-cyan-500/50 backdrop-blur-md text-cyan-300 text-[10px] sm:text-xs font-mono font-bold tracking-wider uppercase shadow-lg shadow-black/80">
-            <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
-            <Tv size={13} className="text-cyan-400" />
+        <div className="absolute top-2.5 sm:top-5 inset-x-2.5 sm:inset-x-6 flex items-center justify-between pointer-events-none">
+          <div className="inline-flex items-center gap-1.5 sm:gap-2 px-2.5 py-1 sm:px-4 sm:py-1.5 rounded-full bg-black/75 border border-cyan-500/50 backdrop-blur-md text-cyan-300 text-[9px] sm:text-xs font-mono font-bold tracking-wider uppercase shadow-lg shadow-black/80">
+            <span className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-cyan-400 animate-pulse" />
+            <Tv size={12} className="text-cyan-400" />
             <span className="hidden sm:inline">LIVE ON DSTV • SPECIALTY COFFEE LOUNGE</span>
             <span className="sm:hidden">DSTV MATCHDAY LOUNGE</span>
           </div>
@@ -53,17 +53,17 @@ export const HattrickHeroBanner: React.FC<HattrickHeroBannerProps> = ({
               <button
                 type="button"
                 onClick={() => setIsZoomed(true)}
-                className="p-1.5 sm:p-2 rounded-full bg-black/60 hover:bg-black/90 border border-cyan-500/40 text-cyan-300 transition-all cursor-pointer shadow-md"
+                className="p-1 sm:p-2 rounded-full bg-black/60 hover:bg-black/90 border border-cyan-500/40 text-cyan-300 transition-all cursor-pointer shadow-md"
                 title="Admin: Expand Full Resolution Graphic"
               >
-                <Maximize2 size={14} />
+                <Maximize2 size={13} />
               </button>
             )}
           </div>
         </div>
 
         {/* Bottom Interactive Quick-Actions Floating Bar */}
-        <div className="absolute bottom-3 sm:bottom-6 inset-x-3 sm:inset-x-8 flex flex-col sm:flex-row items-center justify-between gap-3 pointer-events-auto">
+        <div className="absolute bottom-2.5 sm:bottom-6 inset-x-2.5 sm:inset-x-8 flex flex-col sm:flex-row items-center justify-between gap-2 sm:gap-3 pointer-events-auto">
           
           {/* Left: Origin & Heritage Subtext */}
           <div className="hidden md:flex items-center gap-2 text-stone-300 text-xs font-mono bg-black/70 px-3.5 py-1.5 rounded-full border border-stone-800 backdrop-blur-md">
@@ -75,15 +75,15 @@ export const HattrickHeroBanner: React.FC<HattrickHeroBannerProps> = ({
           </div>
 
           {/* Right: Quick Action Buttons */}
-          <div className="flex items-center gap-2 sm:gap-3 w-full sm:w-auto justify-center sm:justify-end">
+          <div className="flex items-center gap-1.5 sm:gap-3 w-full sm:w-auto justify-center sm:justify-end">
             <button
               type="button"
               onClick={onPredictClick}
-              className="flex-1 sm:flex-none px-5 py-2.5 sm:px-6 sm:py-2.5 rounded-full bg-gradient-to-r from-cyan-400 via-cyan-500 to-blue-600 hover:from-cyan-300 hover:to-blue-500 text-stone-950 font-black text-xs sm:text-sm tracking-wide transition-all shadow-[0_0_20px_rgba(0,240,255,0.45)] flex items-center justify-center gap-1.5 cursor-pointer hover:scale-105 active:scale-95"
+              className="flex-1 sm:flex-none px-3.5 py-2 sm:px-6 sm:py-2.5 rounded-full bg-gradient-to-r from-cyan-400 via-cyan-500 to-blue-600 hover:from-cyan-300 hover:to-blue-500 text-stone-950 font-black text-xs sm:text-sm tracking-wide transition-all shadow-[0_0_20px_rgba(0,240,255,0.45)] flex items-center justify-center gap-1.5 cursor-pointer hover:scale-105 active:scale-95"
             >
-              <Trophy size={15} className="text-stone-950 shrink-0" />
+              <Trophy size={14} className="text-stone-950 shrink-0" />
               <span>Predict & Win</span>
-              <ChevronRight size={15} className="shrink-0" />
+              <ChevronRight size={14} className="shrink-0" />
             </button>
 
             {/* Logo & Assets button - ONLY VISIBLE TO ADMIN */}
@@ -91,9 +91,9 @@ export const HattrickHeroBanner: React.FC<HattrickHeroBannerProps> = ({
               <button
                 type="button"
                 onClick={onOpenLogoModal}
-                className="px-3.5 py-2 sm:px-4 sm:py-2.5 rounded-full bg-black/80 hover:bg-stone-900 border border-cyan-500/40 text-cyan-300 font-bold text-xs sm:text-sm transition-all flex items-center justify-center gap-1.5 cursor-pointer hover:scale-105 backdrop-blur-md"
+                className="px-2.5 py-2 sm:px-4 sm:py-2.5 rounded-full bg-black/80 hover:bg-stone-900 border border-cyan-500/40 text-cyan-300 font-bold text-xs sm:text-sm transition-all flex items-center justify-center gap-1 cursor-pointer hover:scale-105 backdrop-blur-md"
               >
-                <Sparkles size={14} className="text-cyan-400 shrink-0" />
+                <Sparkles size={13} className="text-cyan-400 shrink-0" />
                 <span>Logo Asset</span>
               </button>
             )}

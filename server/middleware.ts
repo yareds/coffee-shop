@@ -224,6 +224,34 @@ export const rateLimitOrdersAndProfiles = (req: Request, res: Response, next: Ne
   return next();
 };
 
+// In-memory rate limiter per verified UID (for profile reads/writes)
+const userRateLimitMap = new Map<string, { count: number; resetAt: number }>();
+
+export const rateLimitPerUser = (maxRequests = 30, windowMs = 60 * 1000) => {
+  return (req: Request, res: Response, next: NextFunction) => {
+    const uid = (req as any).user?.uid;
+    if (!uid) {
+      return next();
+    }
+    const now = Date.now();
+    let record = userRateLimitMap.get(uid);
+    if (!record || now > record.resetAt) {
+      record = { count: 1, resetAt: now + windowMs };
+      userRateLimitMap.set(uid, record);
+      return next();
+    }
+
+    if (record.count >= maxRequests) {
+      return res.status(429).json({
+        error: `Too many requests. Rate limit exceeded (max ${maxRequests} requests/minute per user).`
+      });
+    }
+
+    record.count++;
+    return next();
+  };
+};
+
 /**
  * Standard server error response handler:
  * Logs real error server-side and returns generic message in production.

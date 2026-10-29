@@ -26,6 +26,8 @@ import {
   deleteRegisteredUser,
   getOrders,
   updateOrderStatus,
+  getRedemptions,
+  fulfillRedemption,
   getProfile,
   getAdminAuth,
   verifyUserToken
@@ -483,6 +485,31 @@ router.post("/orders/status", adminAuthMiddleware, async (req, res) => {
     res.json({ success: true, order, orders: allOrders });
   } catch (err: any) {
     res.status(500).json({ error: err.message || "Failed to update order status" });
+  }
+});
+
+// 8. Loyalty points redemption fulfillment
+router.get("/redemptions", adminAuthMiddleware, async (req, res) => {
+  try {
+    const redemptions = await getRedemptions();
+    res.json({ success: true, redemptions });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || "Failed to fetch redemptions" });
+  }
+});
+
+router.post("/redemptions/:id/fulfill", adminAuthMiddleware, async (req, res) => {
+  try {
+    const id = req.params.id;
+    const adminEmail = (req as any).adminEmail || "admin";
+    const fulfilled = await fulfillRedemption(id, adminEmail);
+    if (!fulfilled) {
+      return res.status(404).json({ error: "Redemption record not found" });
+    }
+    const redemptions = await getRedemptions();
+    res.json({ success: true, redemption: fulfilled, redemptions });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || "Failed to fulfill redemption" });
   }
 });
 

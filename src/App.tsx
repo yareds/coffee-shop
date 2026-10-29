@@ -91,6 +91,24 @@ const ALL_MENU_CONFIG: NavMenuItem[] = [
   },
 ];
 
+const INITIAL_LOYALTY: LoyaltyProfile = {
+  points: 0,
+  level: 'Bronze',
+  streak: 1,
+  beansCount: 0,
+  stampsCount: 0,
+  passportStamps: [],
+  unlockedBadges: [],
+  referralCode: "BUNA-EXPLORER",
+  referralsCount: 0,
+  signedUp: false,
+  hasSpunWheel: false,
+  customerName: "Guest",
+  customerEmail: "",
+  rafflePrize: "",
+  hasCollectedPrize: false
+};
+
 export default function App() {
   const [activeTab, setActiveTab] = useState<string>("prize");
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -121,24 +139,8 @@ export default function App() {
   const [toastMsg, setToastMsg] = useState<string | null>(null);
 
   // Load user loyalty profile and promo banner items
-  const loadProfileAndPromos = (currentUser?: AuthUser) => {
+  const loadProfileAndPromos = async (currentUser?: AuthUser) => {
     const user = currentUser !== undefined ? currentUser : authUser;
-    const devId = getDeviceId();
-    const headers: Record<string, string> = { "X-Device-ID": devId };
-    if (user && user.role !== 'guest' && user.email) {
-      headers["X-User-Email"] = user.email;
-    }
-
-    fetch("/api/loyalty", { headers })
-      .then(res => res.json())
-      .then(data => {
-        setLoyalty(data);
-        setLoading(false);
-      })
-      .catch(e => {
-        console.error(e);
-        setLoading(false);
-      });
 
     fetch("/api/promotions")
       .then(res => res.json())
@@ -148,6 +150,37 @@ export default function App() {
         }
       })
       .catch(e => console.error(e));
+
+    // Guests: DO NOT fetch /api/loyalty (guests cannot earn, spend or read profiles, and GET must never create a profile)
+    if (!user || user.role === 'guest') {
+      setLoyalty(INITIAL_LOYALTY);
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const token = await auth.currentUser?.getIdToken();
+      if (!token) {
+        setLoyalty(INITIAL_LOYALTY);
+        setLoading(false);
+        return;
+      }
+
+      const res = await fetch("/api/loyalty", {
+        headers: { "Authorization": `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setLoyalty(data);
+      } else {
+        setLoyalty(INITIAL_LOYALTY);
+      }
+    } catch (e) {
+      console.error(e);
+      setLoyalty(INITIAL_LOYALTY);
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -225,27 +258,6 @@ export default function App() {
     }, 4500);
   };
 
-  // Callback to reward points and show beautiful animation toast
-  const handleRewardPoints = async (pointsAdded: number, reason: string) => {
-    try {
-      const response = await fetch("/api/loyalty/add-points", {
-        method: "POST",
-        headers: { 
-          "Content-Type": "application/json",
-          "X-Device-ID": getDeviceId()
-        },
-        body: JSON.stringify({ points: pointsAdded, reason })
-      });
-      const data = await response.json();
-      if (data.success) {
-        setLoyalty(data.loyalty);
-        triggerToast(`🎉 +${pointsAdded} Points: ${reason}`);
-      }
-    } catch (e) {
-      console.error(e);
-    }
-  };
-
   // Called when drink ordered successfully
   const handleDrinkOrdered = (points: number, customMessage?: string) => {
     loadProfileAndPromos();
@@ -259,19 +271,30 @@ export default function App() {
   };
 
   const handleStampPassport = async (regionName: string) => {
+    if (!authUser || authUser.role === 'guest') {
+      setIsLoginModalOpen(true);
+      return;
+    }
     try {
-      const response = await fetch("/api/passport/stamp", {
+      const idToken = await auth.currentUser?.getIdToken();
+      if (!idToken) {
+        setIsLoginModalOpen(true);
+        return;
+      }
+      const response = await fetch("/api/ethiopia/stamp", {
         method: "POST",
         headers: { 
           "Content-Type": "application/json",
-          "X-Device-ID": getDeviceId()
+          "Authorization": `Bearer ${idToken}`
         },
         body: JSON.stringify({ regionName })
       });
       const data = await response.json();
-      if (data.success) {
+      if (data.success && data.loyalty) {
         setLoyalty(data.loyalty);
         triggerToast(`🇪🇹 Passport stamped for ${regionName}! (+50 points)`);
+      } else if (data.error) {
+        triggerToast(data.error);
       }
     } catch (e) {
       console.error(e);
@@ -360,27 +383,29 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-[#122b1c] text-white font-sans selection:bg-[#2d824d] selection:text-white">
+    <div className="min-h-screen w-full max-w-full overflow-x-hidden bg-[#122b1c] text-white font-sans selection:bg-[#2d824d] selection:text-white">
       
       {/* 1. TOP BRAND HEADER */}
-      <header className="sticky top-0 z-50 bg-[#1a3e29]/95 backdrop-blur-xl border-b border-[#295a3d] px-3 sm:px-4 py-2 sm:py-3">
-        <div className="max-w-7xl mx-auto flex items-center justify-between gap-2 sm:gap-4">
+      <header className="sticky top-0 z-50 bg-[#1a3e29]/95 backdrop-blur-xl border-b border-[#295a3d] px-2.5 sm:px-4 py-2 sm:py-3 w-full">
+        <div className="max-w-7xl mx-auto flex items-center justify-between gap-1.5 sm:gap-4 w-full">
           
-          {/* Logo & Heritage Slogan */}
-          <BunaLogo onClick={() => setActiveTab("prize")} />
+          {/* Logo & Heritage Slogan with responsive overflow containment */}
+          <div className="min-w-0 flex-1 sm:flex-initial overflow-hidden pr-1">
+            <BunaLogo onClick={() => setActiveTab("prize")} />
+          </div>
 
           {/* AUTHENTICATION CONTROLS & GOOGLE SIGN IN */}
-          <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
+          <div className="flex items-center gap-1 sm:gap-2.5 shrink-0">
             {/* Brand Logo & Vector Asset Modal Trigger - ONLY VISIBLE IN ADMIN ACCOUNT */}
             {authUser.role === 'admin' && (
               <button
                 type="button"
                 onClick={() => setIsLogoModalOpen(true)}
-                className="flex items-center gap-1.5 px-2.5 py-1.5 sm:px-3 sm:py-1.5 rounded-full bg-black/60 hover:bg-black/80 border border-amber-500/50 text-amber-300 text-xs font-semibold transition-all shadow-sm cursor-pointer shrink-0"
+                className="flex items-center gap-1.5 px-2 py-1.5 sm:px-3 sm:py-1.5 rounded-full bg-black/60 hover:bg-black/80 border border-amber-500/50 text-amber-300 text-xs font-semibold transition-all shadow-sm cursor-pointer shrink-0"
                 title="Admin: View & Download Official Hattrick Coffee Brand Assets"
               >
                 <Sparkles size={13} className="text-amber-400 animate-pulse" />
-                <span className="text-[11px] sm:text-xs">Logo Asset</span>
+                <span className="hidden sm:inline text-xs">Logo Asset</span>
               </button>
             )}
 
@@ -396,33 +421,33 @@ export default function App() {
             </button>
 
             {authUser.role === 'admin' ? (
-              <div className="flex items-center gap-1.5 sm:gap-2">
-                <div className="px-2.5 py-1 sm:px-3.5 sm:py-1.5 rounded-full bg-amber-500/10 border border-amber-600/30 text-amber-400 text-xs font-medium flex items-center gap-1.5 sm:gap-2 shadow-sm max-w-[130px] sm:max-w-xs">
+              <div className="flex items-center gap-1 sm:gap-2">
+                <div className="px-2 py-1 sm:px-3.5 sm:py-1.5 rounded-full bg-amber-500/10 border border-amber-600/30 text-amber-400 text-xs font-medium flex items-center gap-1 sm:gap-2 shadow-sm max-w-[105px] sm:max-w-xs">
                   <span className="text-xs sm:text-sm shrink-0">👑</span>
                   <span className="hidden md:inline text-stone-400 font-normal">Admin:</span>
-                  <span className="text-white font-semibold font-mono text-[11px] sm:text-xs truncate">{authUser.name}</span>
+                  <span className="text-white font-semibold font-mono text-[10px] sm:text-xs truncate">{authUser.name}</span>
                 </div>
                 <button
                   onClick={handleLogout}
                   title="Sign Out"
-                  className="px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-full bg-[#224e38] hover:bg-[#295a3d] border border-[#295a3d] text-stone-300 hover:text-white text-xs font-medium transition-all flex items-center gap-1.5 cursor-pointer shrink-0"
+                  className="px-2 py-1 sm:px-3 sm:py-1.5 rounded-full bg-[#224e38] hover:bg-[#295a3d] border border-[#295a3d] text-stone-300 hover:text-white text-xs font-medium transition-all flex items-center gap-1 cursor-pointer shrink-0"
                 >
-                  <LogOut size={13} />
+                  <LogOut size={12} />
                   <span className="hidden sm:inline">Sign Out</span>
                 </button>
               </div>
             ) : authUser.role === 'user' ? (
-              <div className="flex items-center gap-1.5 sm:gap-2">
-                <div className="px-2.5 py-1 sm:px-3.5 sm:py-1.5 rounded-full bg-[#122b1c] border border-[#295a3d] text-stone-200 text-xs font-medium flex items-center gap-1.5 sm:gap-2 shadow-sm max-w-[130px] sm:max-w-xs">
-                  <div className="w-2 h-2 rounded-full bg-[#42bd6c] shrink-0" />
-                  <span className="text-white font-semibold font-mono text-[11px] sm:text-xs truncate">{authUser.name || authUser.email || "Explorer"}</span>
+              <div className="flex items-center gap-1 sm:gap-2">
+                <div className="px-2 py-1 sm:px-3.5 sm:py-1.5 rounded-full bg-[#122b1c] border border-[#295a3d] text-stone-200 text-xs font-medium flex items-center gap-1 sm:gap-2 shadow-sm max-w-[105px] sm:max-w-xs">
+                  <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-[#42bd6c] shrink-0" />
+                  <span className="text-white font-semibold font-mono text-[10px] sm:text-xs truncate">{authUser.name || authUser.email || "Explorer"}</span>
                 </div>
                 <button
                   onClick={handleLogout}
                   title="Sign Out"
-                  className="px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-full bg-[#224e38] hover:bg-[#295a3d] border border-[#295a3d] text-stone-300 hover:text-white text-xs font-medium transition-all flex items-center gap-1.5 cursor-pointer shrink-0"
+                  className="px-2 py-1 sm:px-3 sm:py-1.5 rounded-full bg-[#224e38] hover:bg-[#295a3d] border border-[#295a3d] text-stone-300 hover:text-white text-xs font-medium transition-all flex items-center gap-1 cursor-pointer shrink-0"
                 >
-                  <LogOut size={13} />
+                  <LogOut size={12} />
                   <span className="hidden sm:inline">Sign Out</span>
                 </button>
               </div>
@@ -430,7 +455,7 @@ export default function App() {
               <button
                 id="header-google-signin"
                 onClick={() => setIsLoginModalOpen(true)}
-                className="px-2.5 py-1.5 sm:px-4 sm:py-2 rounded-full bg-white hover:bg-stone-100 text-stone-900 font-bold text-xs transition-all flex items-center gap-1.5 sm:gap-2 shadow-md hover:scale-[1.02] active:scale-[0.98] cursor-pointer shrink-0"
+                className="px-2.5 py-1.5 sm:px-4 sm:py-2 rounded-full bg-white hover:bg-stone-100 text-stone-900 font-bold text-xs transition-all flex items-center gap-1 sm:gap-2 shadow-md hover:scale-[1.02] active:scale-[0.98] cursor-pointer shrink-0"
               >
                 <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" viewBox="0 0 24 24">
                   <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
@@ -439,7 +464,7 @@ export default function App() {
                   <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
                 </svg>
                 <span className="hidden sm:inline">Sign in with Google</span>
-                <span className="sm:hidden font-semibold">Sign In</span>
+                <span className="sm:hidden font-semibold text-[11px]">Sign In</span>
               </button>
             )}
           </div>
@@ -448,7 +473,7 @@ export default function App() {
       </header>
 
       {/* 2. MAIN NAVIGATION TAB BAR (Horizontal swipeable on mobile, full bar on md+) */}
-      <nav aria-label="Main Application Navigation" className="sticky top-[49px] sm:top-[57px] z-40 bg-[#122b1c]/95 border-b border-[#295a3d] backdrop-blur-xl py-2 px-2 sm:py-2.5 sm:px-4 relative">
+      <nav aria-label="Main Application Navigation" className="sticky top-[45px] sm:top-[57px] z-40 bg-[#122b1c]/95 border-b border-[#295a3d] backdrop-blur-xl py-2 px-1.5 sm:py-2.5 sm:px-4 relative w-full overflow-hidden">
         {/* Mobile scroll indicator fade gradients */}
         <div className="pointer-events-none absolute left-0 top-0 bottom-0 w-3 bg-gradient-to-r from-[#122b1c] to-transparent lg:hidden z-10" />
         <div className="pointer-events-none absolute right-0 top-0 bottom-0 w-6 bg-gradient-to-l from-[#122b1c] to-transparent lg:hidden z-10" />
@@ -457,7 +482,7 @@ export default function App() {
           role="tablist" 
           aria-label="Navigation Tabs"
           onKeyDown={handleNavKeyDown}
-          className="max-w-7xl mx-auto flex flex-nowrap lg:flex-wrap gap-1.5 sm:gap-2 overflow-x-auto scrollbar-none justify-start items-center scroll-smooth touch-pan-x px-1"
+          className="max-w-7xl mx-auto flex flex-nowrap lg:flex-wrap gap-1.5 sm:gap-2 overflow-x-auto scrollbar-none justify-start items-center scroll-smooth touch-pan-x px-1 w-full"
         >
           {availableMenuItems.map((item) => {
             const isActive = activeTab === item.id;
@@ -630,7 +655,7 @@ export default function App() {
 
       {/* 4. REDESIGNED HERO SECTION (COFFEE + SOCCER MATCH DAY EXPERIENCE) */}
       {activeTab === "prize" && (
-        <section className="relative overflow-hidden bg-gradient-to-b from-[#1a3e29] via-[#122b1c] to-[#122b1c] border-b border-[#295a3d] py-12 lg:py-16 px-4 md:px-8">
+        <section className="relative overflow-hidden bg-gradient-to-b from-[#1a3e29] via-[#122b1c] to-[#122b1c] border-b border-[#295a3d] py-5 sm:py-10 lg:py-16 px-2.5 sm:px-6 md:px-8 w-full max-w-full">
           
           {/* Subtle Pitch-line & Ball Geometric Seam SVG Motifs (CSS/SVG only - NO copyrighted crests/logos) */}
           <div className="absolute inset-0 pointer-events-none z-0 overflow-hidden">
@@ -647,7 +672,7 @@ export default function App() {
             <div className="absolute top-1/2 -right-32 w-[600px] h-[600px] rounded-full bg-[#42bd6c]/10 blur-[140px]" />
           </div>
 
-          <div className="relative max-w-7xl mx-auto z-10">
+          <div className="relative max-w-7xl mx-auto z-10 w-full">
             
             {/* MODERN ENERGETIC HERO BANNER GRAPHIC: DSTV + COFFEE x HATTRICK COFFEE */}
             <HattrickHeroBanner
@@ -662,7 +687,7 @@ export default function App() {
       )}
 
       {/* 5. INTERACTIVE CONTENTS CONTAINER */}
-      <main className="max-w-7xl mx-auto px-4 py-8">
+      <main className="max-w-7xl mx-auto px-2.5 sm:px-4 py-5 sm:py-8 w-full max-w-full overflow-hidden">
         <AnimatePresence mode="wait">
           
           {/* TAB: MATCH DAY PREDICTION PRIZE */}
@@ -678,7 +703,6 @@ export default function App() {
               <MatchDayPrize
                 authUser={authUser}
                 onOpenLogin={() => setIsLoginModalOpen(true)}
-                onRewardPoints={handleRewardPoints}
               />
             </motion.div>
           )}
@@ -749,7 +773,6 @@ export default function App() {
               className="flex flex-col gap-8"
             >
               <CommunityWall 
-                onPostAdded={handleRewardPoints} 
                 authUser={authUser}
                 onOpenLogin={() => setIsLoginModalOpen(true)}
               />
