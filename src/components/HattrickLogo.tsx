@@ -64,7 +64,7 @@ export const HattrickLogo: React.FC<HattrickLogoProps> = ({
       {!imageError ? (
         <img
           src="/assets/aistudio/hattrick_emblem_cropped.png"
-          alt="Hattrick Coffee & Ball Emblem"
+          alt="Hattrick Cafe & Ball Emblem"
           onError={() => setImageError(true)}
           className="w-full h-full object-contain filter drop-shadow-[0_4px_14px_rgba(0,0,0,0.5)]"
         />
@@ -72,7 +72,7 @@ export const HattrickLogo: React.FC<HattrickLogoProps> = ({
         /* High-fidelity Vector Fallback in case image asset is blocked */
         <img
           src="/assets/aistudio/logo_714966a9.jpg"
-          alt="Hattrick Coffee & Ball Emblem"
+          alt="Hattrick Cafe & Ball Emblem"
           className="w-full h-full object-contain rounded-full filter drop-shadow-[0_4px_14px_rgba(0,0,0,0.5)]"
         />
       )}
@@ -102,7 +102,7 @@ export const HattrickLogo: React.FC<HattrickLogoProps> = ({
 
         {/* Row 1: English Title */}
         <h1 className={`font-black font-sans uppercase mt-3 transition-colors group-hover:text-amber-400 leading-tight ${titleSizeClass} ${textColorTitle}`}>
-          HATTRICK COFFEE
+          HATTRICK CAFE
         </h1>
 
         {/* Row 2: Amharic + Location */}
@@ -124,7 +124,7 @@ export const HattrickLogo: React.FC<HattrickLogoProps> = ({
   }
 
   // Horizontal Format Lockup matching the reference:
-  // [ EMBLEM ]  HATTRICK COFFEE
+  // [ EMBLEM ]  HATTRICK CAFE
   //             ሃትሪክ ቡና  HAWASSA, ETHIOPIA
   return (
     <div
@@ -136,7 +136,7 @@ export const HattrickLogo: React.FC<HattrickLogoProps> = ({
       <div className="flex flex-col justify-center min-w-0">
         {/* ROW 1: English Title */}
         <h1 className={`font-black font-sans uppercase transition-colors group-hover:text-amber-400 leading-tight truncate ${titleSizeClass} ${textColorTitle}`}>
-          HATTRICK COFFEE
+          HATTRICK CAFE
         </h1>
 
         {/* ROW 2: Amharic Script + Hawassa Location Side by Side */}

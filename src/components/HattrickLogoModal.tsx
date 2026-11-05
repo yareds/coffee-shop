@@ -117,7 +117,7 @@ export const HattrickLogoModal: React.FC<HattrickLogoModalProps> = ({ isOpen, on
             <span className="w-2.5 h-2.5 rounded-full bg-cyan-400 animate-pulse" />
             <div>
               <h2 className="text-lg font-bold text-white tracking-wide flex items-center gap-2">
-                HATTRICK COFFEE Brand Asset Suite
+                HATTRICK CAFE Brand Asset Suite
                 <span className="text-xs font-mono px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-300 border border-cyan-500/30">
                   Official Assets
                 </span>
@@ -229,7 +229,7 @@ export const HattrickLogoModal: React.FC<HattrickLogoModalProps> = ({ isOpen, on
                   </span>
                   <img
                     src="/assets/aistudio/logo_714966a9.jpg"
-                    alt="Hattrick Coffee Exact Emblem"
+                    alt="Hattrick Cafe Exact Emblem"
                     className="max-h-64 w-auto object-contain rounded-xl shadow-xl border border-stone-200 select-none"
                   />
                 </div>
@@ -240,7 +240,7 @@ export const HattrickLogoModal: React.FC<HattrickLogoModalProps> = ({ isOpen, on
                   <div className="p-4 rounded-xl bg-black/5 border border-stone-300/40">
                     <img
                       src="/assets/aistudio/hattrick_emblem_cropped.png"
-                      alt="Hattrick Coffee Transparent Emblem"
+                      alt="Hattrick Cafe Transparent Emblem"
                       className="max-h-56 w-auto object-contain filter drop-shadow-[0_8px_20px_rgba(0,0,0,0.3)] select-none"
                     />
                   </div>
@@ -251,7 +251,7 @@ export const HattrickLogoModal: React.FC<HattrickLogoModalProps> = ({ isOpen, on
             {activeView === "full_lockup" && (
               <img
                 src="/assets/aistudio/image_6c7db08c.png"
-                alt="Hattrick Coffee Official Reference Logo"
+                alt="Hattrick Cafe Official Reference Logo"
                 className="max-h-72 w-auto object-contain filter drop-shadow-md select-none"
               />
             )}
@@ -259,7 +259,7 @@ export const HattrickLogoModal: React.FC<HattrickLogoModalProps> = ({ isOpen, on
             {activeView === "vector_light" && (
               <img
                 src="/hattrick-coffee-logo.svg"
-                alt="Hattrick Coffee Light Vector Logo"
+                alt="Hattrick Cafe Light Vector Logo"
                 className="max-h-72 w-full object-contain filter drop-shadow-md select-none"
               />
             )}
@@ -267,7 +267,7 @@ export const HattrickLogoModal: React.FC<HattrickLogoModalProps> = ({ isOpen, on
             {activeView === "vector_dark" && (
               <img
                 src="/hattrick-coffee-logo-dark.svg"
-                alt="Hattrick Coffee Dark Vector Logo"
+                alt="Hattrick Cafe Dark Vector Logo"
                 className="max-h-72 w-full object-contain filter drop-shadow-lg select-none"
               />
             )}
@@ -382,7 +382,7 @@ export const HattrickLogoModal: React.FC<HattrickLogoModalProps> = ({ isOpen, on
                 <span className="text-amber-400">📍</span> Hawassa, Ethiopia
               </h4>
               <p className="text-stone-400 leading-relaxed">
-                Complete bilingual identity featuring <strong>HATTRICK COFFEE</strong> and <strong>ሃትሪክ ቡና</strong> with authentic Ethiopian typography.
+                Complete bilingual identity featuring <strong>HATTRICK CAFE</strong> and <strong>ሃትሪክ ቡና</strong> with authentic Ethiopian typography.
               </p>
             </div>
           </div>

@@ -2,12 +2,14 @@ import React, { useState, useEffect } from "react";
 import { 
   Trophy, Clock, AlertTriangle, CheckCircle2, XCircle, Shield, 
   Sparkles, Check, Lock, User, RefreshCw, ChevronRight, Award,
-  Copy, Calendar, ArrowRight, BarChart3, HelpCircle, Gift, QrCode
+  Copy, Calendar, ArrowRight, BarChart3, HelpCircle, Gift, QrCode,
+  Share2
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { PredictionMatch, Prediction, AuthUser, UserPredictionSummary } from "../types";
 import { auth } from "../lib/firebase";
-import HattrickLogo from "./HattrickLogo";
+import SiniToGoBrand from "./SiniToGoBrand";
+import SharePredictionModal from "./SharePredictionModal";
 
 interface MatchDayPrizeProps {
   authUser: AuthUser;
@@ -76,6 +78,11 @@ export default function MatchDayPrize({ authUser, onOpenLogin }: MatchDayPrizePr
   const [submitting, setSubmitting] = useState(false);
   const [submitMsg, setSubmitMsg] = useState<{ text: string; type: "success" | "error" } | null>(null);
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
+  const [shareData, setShareData] = useState<{ prediction: Prediction; match: PredictionMatch } | null>(null);
+
+  const handleOpenShare = (targetPrediction: Prediction, targetMatch: PredictionMatch) => {
+    setShareData({ prediction: targetPrediction, match: targetMatch });
+  };
 
   // Form selections for 3 legs
   const [outcome, setOutcome] = useState<"HOME" | "AWAY" | "DRAW">("HOME");
@@ -442,36 +449,36 @@ export default function MatchDayPrize({ authUser, onOpenLogin }: MatchDayPrizePr
     <div className="flex flex-col gap-6">
       
       {/* 1. HERO BANNER: ETHIOPIAN COFFEE X MATCHDAY PREDICTION */}
-      <div className="bg-[#1a3e29] p-4 sm:p-6 rounded-2xl border border-[#295a3d] relative overflow-hidden w-full max-w-full">
+      <div className="bg-[#1a3e29] p-3.5 sm:p-5 md:p-6 rounded-2xl border border-[#295a3d] relative overflow-hidden w-full max-w-full">
         {/* Pitch Lines Motif Accent */}
         <div className="absolute -right-12 -top-12 w-48 h-48 rounded-full border-2 border-[#42bd6c]/15 pointer-events-none" />
         <div className="absolute right-12 -top-6 w-24 h-24 rounded-full border border-[#42bd6c]/10 pointer-events-none" />
 
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 sm:gap-5 relative z-10 w-full">
-          <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 min-w-0">
-            <HattrickLogo size="md" theme="dark" showLocation={false} className="shrink-0" />
-            <div className="border-t sm:border-t-0 sm:border-l border-amber-500/20 pt-2.5 sm:pt-0 sm:pl-4 min-w-0">
-              <div className="flex items-center gap-2 mb-1">
-                <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[9px] sm:text-[10px] font-mono font-bold uppercase tracking-wider">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 sm:gap-6 relative z-10 w-full max-w-full">
+          <div className="flex flex-col md:flex-row md:items-center gap-3.5 sm:gap-5 min-w-0 flex-1">
+            <SiniToGoBrand className="min-w-0" />
+            <div className="border-t md:border-t-0 md:border-l border-amber-500/20 pt-3 md:pt-0 md:pl-5 min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 mb-1">
+                <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[9px] sm:text-[10px] font-mono font-bold uppercase tracking-wider shrink-0">
                   WEEKLY PREDICTION SYSTEM
                 </span>
-                <span className="text-[10px] sm:text-[11px] font-mono text-stone-300">
+                <span className="text-[10px] sm:text-[11px] font-mono text-stone-300 shrink-0">
                   Hawassa, Ethiopia
                 </span>
               </div>
-              <p className="text-xs text-stone-300 max-w-xl leading-relaxed">
-                Predict outcome, exact scoreline, and goalscorer. All 3 correct wins the featured Sidama & Yirgacheffe coffee reward at our sports lounge!
+              <p className="text-xs text-stone-300 leading-relaxed max-w-xl">
+                Predict outcome, exact scoreline, and goalscorer. 
               </p>
             </div>
           </div>
 
-          <div className="flex flex-col sm:items-end gap-2 shrink-0">
-            <div className="px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[11px] sm:text-xs font-mono font-bold flex items-center gap-1.5 self-start sm:self-auto">
-              <CheckCircle2 size={13} />
+          <div className="flex flex-col sm:flex-row lg:flex-col sm:items-center lg:items-end justify-between gap-2.5 shrink-0 pt-3 lg:pt-0 border-t lg:border-t-0 border-[#295a3d]/50">
+            <div className="px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[10px] sm:text-xs font-mono font-bold flex items-center gap-1.5 self-start sm:self-auto">
+              <CheckCircle2 size={13} className="shrink-0" />
               <span>100% Free Entry • No Order Required</span>
             </div>
             {auth.currentUser ? (
-              <span className="text-xs text-stone-300 font-mono flex items-center gap-1.5 truncate max-w-xs">
+              <span className="text-xs text-stone-300 font-mono flex items-center gap-1.5 truncate max-w-xs self-start sm:self-auto">
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
                 <span className="truncate">Signed in as <strong className="text-white">{auth.currentUser.displayName || auth.currentUser.email}</strong></span>
               </span>
@@ -479,7 +486,7 @@ export default function MatchDayPrize({ authUser, onOpenLogin }: MatchDayPrizePr
               <button
                 type="button"
                 onClick={onOpenLogin}
-                className="px-3 py-1.5 rounded-xl bg-white hover:bg-stone-100 text-stone-900 font-bold text-xs shadow-md transition-all flex items-center gap-1.5 cursor-pointer self-start sm:self-auto"
+                className="px-3.5 py-1.5 rounded-xl bg-white hover:bg-stone-100 text-stone-900 font-bold text-xs shadow-md transition-all flex items-center gap-1.5 cursor-pointer self-start sm:self-auto shrink-0"
               >
                 <User size={13} />
                 <span>Register / Sign In</span>
@@ -753,13 +760,27 @@ export default function MatchDayPrize({ authUser, onOpenLogin }: MatchDayPrizePr
                     <span className="text-xs font-bold text-white uppercase font-mono tracking-wider">
                       Your 3-Leg Prediction Breakdown
                     </span>
-                    <span className={`text-xs font-bold font-mono px-2 py-0.5 rounded-full ${
-                      userPrediction.grandPrizeWinner 
-                        ? "bg-amber-400 text-stone-950 font-black" 
-                        : "bg-[#224e38] text-stone-200"
-                    }`}>
-                      {userPrediction.legsCorrect}/3 Legs Correct
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className={`text-xs font-bold font-mono px-2 py-0.5 rounded-full ${
+                        userPrediction.grandPrizeWinner 
+                          ? "bg-amber-400 text-stone-950 font-black" 
+                          : "bg-[#224e38] text-stone-200"
+                      }`}>
+                        {userPrediction.legsCorrect}/3 Legs Correct
+                      </span>
+
+                      {match && (
+                        <button
+                          type="button"
+                          onClick={() => handleOpenShare(userPrediction, match)}
+                          className="px-2.5 py-1 rounded-full bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 text-xs font-mono font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm hover:scale-105 active:scale-95"
+                          title="Share your prediction results on social media"
+                        >
+                          <Share2 size={13} />
+                          <span>Share Results</span>
+                        </button>
+                      )}
+                    </div>
                   </div>
 
                   {userPrediction.grandPrizeWinner && (
@@ -784,20 +805,34 @@ export default function MatchDayPrize({ authUser, onOpenLogin }: MatchDayPrizePr
                         </div>
 
                         {userPrediction.claimCode && (
-                          <div className={`px-3 py-1.5 rounded-lg font-mono text-xs flex items-center gap-2 self-start sm:self-auto ${
-                            userPrediction.prizeCollected
-                              ? "bg-stone-900 border border-emerald-500/40 text-emerald-300"
-                              : "bg-stone-950 text-amber-300"
-                          }`}>
-                            <span className="font-bold">Claim Code: {userPrediction.claimCode}</span>
-                            <button
-                              type="button"
-                              onClick={() => handleCopyCode(userPrediction.claimCode!)}
-                              className="text-white hover:text-amber-200 cursor-pointer"
-                              title="Copy code"
-                            >
-                              {copiedCode === userPrediction.claimCode ? <Check size={13} className="text-emerald-400" /> : <Copy size={13} />}
-                            </button>
+                          <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+                            {match && (
+                              <button
+                                type="button"
+                                onClick={() => handleOpenShare(userPrediction, match)}
+                                className="px-3 py-1.5 rounded-lg font-mono text-xs font-bold bg-stone-950 hover:bg-stone-900 border border-amber-400 text-amber-300 flex items-center gap-1.5 transition-all cursor-pointer shadow-md hover:scale-105 active:scale-95"
+                                title="Share your victory on social media"
+                              >
+                                <Share2 size={13} />
+                                <span>Share Win 🏆</span>
+                              </button>
+                            )}
+
+                            <div className={`px-3 py-1.5 rounded-lg font-mono text-xs flex items-center gap-2 ${
+                              userPrediction.prizeCollected
+                                ? "bg-stone-900 border border-emerald-500/40 text-emerald-300"
+                                : "bg-stone-950 text-amber-300"
+                            }`}>
+                              <span className="font-bold">Claim Code: {userPrediction.claimCode}</span>
+                              <button
+                                type="button"
+                                onClick={() => handleCopyCode(userPrediction.claimCode!)}
+                                className="text-white hover:text-amber-200 cursor-pointer"
+                                title="Copy code"
+                              >
+                                {copiedCode === userPrediction.claimCode ? <Check size={13} className="text-emerald-400" /> : <Copy size={13} />}
+                              </button>
+                            </div>
                           </div>
                         )}
                       </div>
@@ -879,7 +914,7 @@ export default function MatchDayPrize({ authUser, onOpenLogin }: MatchDayPrizePr
           )}
 
           {/* Prediction Slip Form */}
-          <div className="bg-[#1a3e29] p-6 rounded-2xl border border-[#295a3d] flex flex-col gap-6">
+          <div id="active-prediction-slip" className="bg-[#1a3e29] p-6 rounded-2xl border border-[#295a3d] flex flex-col gap-6">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-[#295a3d]">
               <div>
                 <h3 className="text-lg font-bold text-white tracking-tight flex items-center gap-2">
@@ -901,16 +936,30 @@ export default function MatchDayPrize({ authUser, onOpenLogin }: MatchDayPrizePr
                 </p>
               </div>
 
-              {!auth.currentUser && (
-                <button
-                  type="button"
-                  onClick={onOpenLogin}
-                  className="px-4 py-2 rounded-xl bg-white hover:bg-stone-100 text-stone-900 font-bold text-xs transition-all shadow-md flex items-center gap-2 self-start sm:self-auto cursor-pointer shrink-0"
-                >
-                  <User size={14} />
-                  <span>Sign in to save predictions</span>
-                </button>
-              )}
+              <div className="flex items-center gap-2 self-start sm:self-auto">
+                {userPrediction && match && (
+                  <button
+                    type="button"
+                    onClick={() => handleOpenShare(userPrediction, match)}
+                    className="px-3 py-1.5 rounded-xl bg-[#224e38] hover:bg-[#2d664a] border border-[#387a59] text-emerald-300 hover:text-white font-mono font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow-sm hover:scale-105 active:scale-95"
+                    title="Share your 3-leg prediction with friends"
+                  >
+                    <Share2 size={13} />
+                    <span>Share Prediction</span>
+                  </button>
+                )}
+
+                {!auth.currentUser && (
+                  <button
+                    type="button"
+                    onClick={onOpenLogin}
+                    className="px-4 py-2 rounded-xl bg-white hover:bg-stone-100 text-stone-900 font-bold text-xs transition-all shadow-md flex items-center gap-2 cursor-pointer shrink-0"
+                  >
+                    <User size={14} />
+                    <span>Sign in to save predictions</span>
+                  </button>
+                )}
+              </div>
             </div>
 
             {submitMsg && (
@@ -1434,6 +1483,30 @@ export default function MatchDayPrize({ authUser, onOpenLogin }: MatchDayPrizePr
                             <span>View Slip</span>
                             <ChevronRight size={12} />
                           </button>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const targetMatch = pred.match || match || {
+                                id: pred.matchId,
+                                homeTeam: "Home",
+                                awayTeam: "Away",
+                                competition: "Match Day Challenge",
+                                kickoffAt: pred.submittedAt,
+                                status: isMatchSettled ? "settled" : "scheduled",
+                                prizeDescription: "Artisanal Coffee & Matchday Prize",
+                                players: [],
+                                weekKey: "",
+                                createdAt: pred.submittedAt
+                              };
+                              handleOpenShare(pred, targetMatch);
+                            }}
+                            className="px-2 py-0.5 rounded bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-300 hover:text-emerald-200 flex items-center gap-1 text-[11px] font-mono font-bold transition-all cursor-pointer"
+                            title="Share on social media"
+                          >
+                            <Share2 size={11} />
+                            <span>Share</span>
+                          </button>
                         </div>
                       </div>
 
@@ -1639,6 +1712,16 @@ export default function MatchDayPrize({ authUser, onOpenLogin }: MatchDayPrizePr
             })}
           </div>
         </div>
+      )}
+
+      {/* Share Prediction Social Media Modal */}
+      {shareData && (
+        <SharePredictionModal
+          isOpen={Boolean(shareData)}
+          onClose={() => setShareData(null)}
+          prediction={shareData.prediction}
+          match={shareData.match}
+        />
       )}
 
     </div>

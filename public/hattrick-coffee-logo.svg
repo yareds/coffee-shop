@@ -161,7 +161,7 @@
   <!-- ======================================================== -->
   <g id="typography-group">
     
-    <!-- ROW 1: "HATTRICK COFFEE" (Clean Bold Sans-Serif Uppercase) -->
+    <!-- ROW 1: "HATTRICK CAFE" (Clean Bold Sans-Serif Uppercase) -->
     <text x="355" 
           y="200" 
           font-family="'Plus Jakarta Sans', 'Montserrat', 'Inter', -apple-system, sans-serif" 
@@ -169,7 +169,7 @@
           font-weight="900" 
           letter-spacing="0.05em" 
           fill="#2C170E">
-      HATTRICK COFFEE
+      HATTRICK CAFE
     </text>
 
     <!-- ROW 2: AMHARIC SCRIPT "ሃትሪክ ቡና" -->

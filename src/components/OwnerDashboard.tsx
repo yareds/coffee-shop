@@ -1743,7 +1743,7 @@ export default function OwnerDashboard() {
                 <span className="text-xs font-mono text-stone-300">Brand Identity Suite</span>
               </div>
               <h3 className="text-xl font-bold font-serif-display text-white">
-                Hattrick Coffee • Official Brand & Graphic Assets
+                Hattrick Cafe • Official Brand & Graphic Assets
               </h3>
               <p className="text-xs text-stone-300 mt-0.5 max-w-xl leading-relaxed">
                 High-resolution logos, transparent PNG cutouts, 16:9 cinematic banners, and vector SVGs for merchandise, signage, and social media.

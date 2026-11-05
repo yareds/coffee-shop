@@ -1,9 +1,9 @@
 import React, { useState } from "react";
-import { motion } from "motion/react";
-import { Trophy, Tv, Coffee, Sparkles, ChevronRight, Eye, Download, Maximize2 } from "lucide-react";
+import { Tv, Sparkles, Download, Maximize2 } from "lucide-react";
 
 interface HattrickHeroBannerProps {
   isAdmin?: boolean;
+  isLoggedIn?: boolean;
   onPredictClick?: () => void;
   onExploreMapClick?: () => void;
   onOpenLogoModal?: () => void;
@@ -11,6 +11,7 @@ interface HattrickHeroBannerProps {
 
 export const HattrickHeroBanner: React.FC<HattrickHeroBannerProps> = ({
   isAdmin = false,
+  isLoggedIn = false,
   onPredictClick,
   onExploreMapClick,
   onOpenLogoModal,
@@ -28,7 +29,7 @@ export const HattrickHeroBanner: React.FC<HattrickHeroBannerProps> = ({
         {/* Master Realistic Graphic Asset */}
         <img
           src="/assets/aistudio/image_74f28168.png"
-          alt="Hattrick Coffee - DSTV + COFFEE Hawassa Ethiopia"
+          alt="Hattrick Cafe - DSTV + COFFEE Hawassa Ethiopia"
           className="w-full h-full object-cover sm:object-contain object-center transition-transform duration-700 group-hover:scale-[1.01]"
         />
 
@@ -62,32 +63,18 @@ export const HattrickHeroBanner: React.FC<HattrickHeroBannerProps> = ({
           </div>
         </div>
 
-        {/* Bottom Interactive Quick-Actions Floating Bar */}
-        <div className="absolute bottom-2.5 sm:bottom-6 inset-x-2.5 sm:inset-x-8 flex flex-col sm:flex-row items-center justify-between gap-2 sm:gap-3 pointer-events-auto">
-          
+        {/* Bottom Interactive Bar (Heritage Tag & Admin Action) */}
+        <div className="absolute bottom-2.5 sm:bottom-6 inset-x-2.5 sm:inset-x-8 flex items-center justify-between gap-2 sm:gap-3 pointer-events-auto">
           {/* Left: Origin & Heritage Subtext */}
           <div className="hidden md:flex items-center gap-2 text-stone-300 text-xs font-mono bg-black/70 px-3.5 py-1.5 rounded-full border border-stone-800 backdrop-blur-md">
             <span className="text-amber-400 font-bold">☕ HAWASSA</span>
             <span>•</span>
-            <span className="text-cyan-300">🇪🇹 SIDAMA TERROIR</span>
-            <span>•</span>
             <span className="text-stone-300">WEEKLY PREDICTION SYSTEM</span>
           </div>
 
-          {/* Right: Quick Action Buttons */}
-          <div className="flex items-center gap-1.5 sm:gap-3 w-full sm:w-auto justify-center sm:justify-end">
-            <button
-              type="button"
-              onClick={onPredictClick}
-              className="flex-1 sm:flex-none px-3.5 py-2 sm:px-6 sm:py-2.5 rounded-full bg-gradient-to-r from-cyan-400 via-cyan-500 to-blue-600 hover:from-cyan-300 hover:to-blue-500 text-stone-950 font-black text-xs sm:text-sm tracking-wide transition-all shadow-[0_0_20px_rgba(0,240,255,0.45)] flex items-center justify-center gap-1.5 cursor-pointer hover:scale-105 active:scale-95"
-            >
-              <Trophy size={14} className="text-stone-950 shrink-0" />
-              <span>Predict & Win</span>
-              <ChevronRight size={14} className="shrink-0" />
-            </button>
-
-            {/* Logo & Assets button - ONLY VISIBLE TO ADMIN */}
-            {isAdmin && (
+          {/* Right: Admin Logo & Assets button - ONLY VISIBLE TO ADMIN */}
+          {isAdmin && (
+            <div className="flex items-center justify-end w-full sm:w-auto">
               <button
                 type="button"
                 onClick={onOpenLogoModal}
@@ -96,8 +83,8 @@ export const HattrickHeroBanner: React.FC<HattrickHeroBannerProps> = ({
                 <Sparkles size={13} className="text-cyan-400 shrink-0" />
                 <span>Logo Asset</span>
               </button>
-            )}
-          </div>
+            </div>
+          )}
         </div>
 
       </div>
@@ -113,7 +100,7 @@ export const HattrickHeroBanner: React.FC<HattrickHeroBannerProps> = ({
               <div className="flex items-center gap-2">
                 <span className="w-2.5 h-2.5 rounded-full bg-cyan-400 animate-pulse" />
                 <span className="font-bold text-sm tracking-wide">
-                  HATTRICK COFFEE • Official 16:9 Hero Graphic (1376x768)
+                  HATTRICK CAFE • Official 16:9 Hero Graphic (1376x768)
                 </span>
               </div>
               <div className="flex items-center gap-2">
@@ -137,7 +124,7 @@ export const HattrickHeroBanner: React.FC<HattrickHeroBannerProps> = ({
             <div className="w-full rounded-2xl overflow-hidden border border-cyan-500/40 shadow-2xl bg-black">
               <img
                 src="/assets/aistudio/image_74f28168.png"
-                alt="Hattrick Coffee Hero Full Graphic"
+                alt="Hattrick Cafe Hero Full Graphic"
                 className="w-full h-auto max-h-[80vh] object-contain mx-auto"
               />
             </div>

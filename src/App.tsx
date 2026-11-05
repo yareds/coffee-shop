@@ -402,7 +402,7 @@ export default function App() {
                 type="button"
                 onClick={() => setIsLogoModalOpen(true)}
                 className="flex items-center gap-1.5 px-2 py-1.5 sm:px-3 sm:py-1.5 rounded-full bg-black/60 hover:bg-black/80 border border-amber-500/50 text-amber-300 text-xs font-semibold transition-all shadow-sm cursor-pointer shrink-0"
-                title="Admin: View & Download Official Hattrick Coffee Brand Assets"
+                title="Admin: View & Download Official Hattrick Cafe Brand Assets"
               >
                 <Sparkles size={13} className="text-amber-400 animate-pulse" />
                 <span className="hidden sm:inline text-xs">Logo Asset</span>
@@ -674,10 +674,21 @@ export default function App() {
 
           <div className="relative max-w-7xl mx-auto z-10 w-full">
             
-            {/* MODERN ENERGETIC HERO BANNER GRAPHIC: DSTV + COFFEE x HATTRICK COFFEE */}
+            {/* MODERN ENERGETIC HERO BANNER GRAPHIC: DSTV + COFFEE x HATTRICK CAFE */}
             <HattrickHeroBanner
               isAdmin={authUser.role === 'admin'}
-              onPredictClick={() => handleTabClick("prize")}
+              isLoggedIn={authUser.role !== 'guest' && Boolean(auth.currentUser)}
+              onPredictClick={() => {
+                if (!authUser || authUser.role === 'guest' || !auth.currentUser) {
+                  setIsLoginModalOpen(true);
+                } else {
+                  handleTabClick("prize");
+                  setTimeout(() => {
+                    const el = document.getElementById("active-prediction-slip");
+                    if (el) el.scrollIntoView({ behavior: "smooth" });
+                  }, 80);
+                }
+              }}
               onExploreMapClick={() => handleTabClick("map")}
               onOpenLogoModal={() => setIsLogoModalOpen(true)}
             />
@@ -825,7 +836,7 @@ export default function App() {
         deviceId={getDeviceId()}
       />
 
-      {/* HATTRICK COFFEE OFFICIAL LOGO & VECTOR ASSET MODAL - ADMIN ONLY */}
+      {/* HATTRICK CAFE OFFICIAL LOGO & VECTOR ASSET MODAL - ADMIN ONLY */}
       {authUser.role === 'admin' && (
         <HattrickLogoModal
           isOpen={isLogoModalOpen}
