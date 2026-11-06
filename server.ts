@@ -133,14 +133,28 @@ const startServer = async () => {
     });
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
+  const server = app.listen(PORT, "0.0.0.0", () => {
     console.log(`BUNA server running on http://localhost:${PORT}`);
+  });
+
+  server.on("error", (err: any) => {
+    if (err.code === "EADDRINUSE") {
+      console.warn(`[Server] Port ${PORT} is temporarily in use. Retrying in 1s...`);
+      setTimeout(() => {
+        server.close();
+        server.listen(PORT, "0.0.0.0");
+      }, 1000);
+    } else {
+      console.error("[Server Error]", err);
+    }
   });
 };
 
 export { app };
 
 if (process.env.FUNCTIONS_TARGET !== "true") {
-  startServer();
+  startServer().catch((err) => {
+    console.error("[Fatal Startup Error]", err);
+  });
 }
 
