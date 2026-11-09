@@ -15,7 +15,6 @@
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.1.14",
-    "@types/qrcode": "^1.5.6",
     "@vitejs/plugin-react": "^5.0.4",
     "dotenv": "^17.2.3",
     "express": "^4.21.2",
@@ -32,6 +31,7 @@
   "devDependencies": {
     "@types/express": "^4.17.21",
     "@types/node": "^22.14.0",
+    "@types/qrcode": "^1.5.6",
     "autoprefixer": "^10.4.21",
     "esbuild": "^0.25.0",
     "pngjs": "^7.0.0",
@@ -41,7 +41,7 @@
     "vite": "^6.2.3"
   },
   "overrides": {
-    "@grpc/grpc-js": "^1.14.6",
-    "qs": "^6.16.2"
+    "@grpc/grpc-js": "^1.14.4",
+    "qs": "^6.16.0"
   }
 }
