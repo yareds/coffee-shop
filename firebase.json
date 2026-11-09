@@ -1,6 +1,7 @@
 {
   "hosting": {
     "public": "dist",
+    "site": "hattrick-cafe",
     "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
     "headers": [
       {
