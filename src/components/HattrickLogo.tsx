@@ -21,14 +21,14 @@ export const HattrickLogo: React.FC<HattrickLogoProps> = ({
 }) => {
   const [imageError, setImageError] = useState(false);
 
-  // Exact sizing mappings preserving the 1:1.24 aspect ratio of the official emblem (326x406)
+  // Exact sizing mappings for the circular soccer ball & coffee bean emblem (1:1 aspect ratio)
   const iconSizeClass = {
-    xs: "w-6 h-7.5",
-    sm: "w-7 h-9 sm:w-8 sm:h-10",
-    md: "w-8 h-10 sm:w-11 sm:h-14",
-    lg: "w-10 h-12.5 sm:w-20 sm:h-25",
-    xl: "w-16 h-20 sm:w-32 sm:h-40",
-    hero: "w-24 h-30 sm:w-48 sm:h-60"
+    xs: "w-6 h-6",
+    sm: "w-8 h-8 sm:w-9 sm:h-9",
+    md: "w-10 h-10 sm:w-12 sm:h-12",
+    lg: "w-14 h-14 sm:w-20 sm:h-20",
+    xl: "w-20 h-20 sm:w-32 sm:h-32",
+    hero: "w-28 h-28 sm:w-48 sm:h-48"
   }[size];
 
   const titleSizeClass = {
@@ -58,21 +58,21 @@ export const HattrickLogo: React.FC<HattrickLogoProps> = ({
     hero: "text-sm sm:text-lg tracking-[0.18em] sm:tracking-[0.22em]"
   }[size];
 
-  // Exact Emblem Artwork from attached image
+  // Exact Soccer Ball & Coffee Bean Emblem Artwork from Hero Section
   const BeanIcon = (
     <div className={`relative ${iconSizeClass} shrink-0 select-none group-hover:scale-105 transition-transform duration-300 flex items-center justify-center`}>
       {!imageError ? (
         <img
           src="/assets/aistudio/hattrick_emblem_cropped.png"
-          alt="Hattrick Cafe & Ball Emblem"
+          alt="Hattrick Cafe Soccer Ball Emblem"
           onError={() => setImageError(true)}
           className="w-full h-full object-contain filter drop-shadow-[0_4px_14px_rgba(0,0,0,0.5)]"
         />
       ) : (
-        /* High-fidelity Vector Fallback in case image asset is blocked */
+        /* Fallback asset */
         <img
           src="/assets/aistudio/logo_714966a9.jpg"
-          alt="Hattrick Cafe & Ball Emblem"
+          alt="Hattrick Cafe Soccer Ball Emblem"
           className="w-full h-full object-contain rounded-full filter drop-shadow-[0_4px_14px_rgba(0,0,0,0.5)]"
         />
       )}

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { 
   Coffee, MapPin, Compass, Sparkles, Award, Users, ShieldAlert,
   Clock, Flame, RefreshCw, Star, Info, Bell, MessageSquare, Check, HelpCircle,
-  User, ShieldCheck, LogIn, LogOut, Key, ChevronDown, Menu, X, Trophy
+  User, ShieldCheck, LogIn, LogOut, Key, ChevronDown, Menu, X, Trophy, QrCode
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
@@ -19,6 +19,7 @@ import OwnerDashboard from "./components/OwnerDashboard";
 import BunaLogo from "./components/BunaLogo";
 import HattrickLogoModal from "./components/HattrickLogoModal";
 import HattrickHeroBanner from "./components/HattrickHeroBanner";
+import PredictionQRCodePage from "./components/PredictionQRCodePage";
 import { LoyaltyProfile, AuthUser } from "./types";
 import { auth } from "./lib/firebase";
 import { onAuthStateChanged, signOut as fbSignOut } from "firebase/auth";
@@ -81,6 +82,14 @@ const ALL_MENU_CONFIG: NavMenuItem[] = [
     desc: "Stories, recipes & community feedback",
   },
   {
+    id: "qrcode",
+    icon: "📱",
+    label: "Prediction QR Code",
+    shortLabel: "QR Code",
+    desc: "In-store scan code for matchday prediction slip",
+    badge: "Scanner",
+  },
+  {
     id: "owner",
     icon: "👑",
     label: "Admin Operations",
@@ -110,7 +119,14 @@ const INITIAL_LOYALTY: LoyaltyProfile = {
 };
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<string>("prize");
+  const [activeTab, setActiveTab] = useState<string>(() => {
+    if (typeof window !== "undefined") {
+      const hash = window.location.hash.replace("#", "");
+      if (hash === "qrcode" || hash === "qr") return "qrcode";
+      if (["prize", "map", "sensory", "loyalty", "wall", "owner"].includes(hash)) return hash;
+    }
+    return "prize";
+  });
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [loyalty, setLoyalty] = useState<LoyaltyProfile | null>(null);
   const [loading, setLoading] = useState(true);
@@ -340,8 +356,35 @@ export default function App() {
     triggerToast("Signed out successfully. Now browsing as Guest.");
   };
 
+  useEffect(() => {
+    const handleHash = () => {
+      if (typeof window === "undefined") return;
+      const hash = window.location.hash.replace("#", "");
+      if (hash === "qrcode" || hash === "qr") {
+        setActiveTab("qrcode");
+      } else if (hash === "prize" || hash === "") {
+        setActiveTab("prize");
+      } else if (["map", "sensory", "loyalty", "wall", "owner"].includes(hash)) {
+        setActiveTab(hash);
+      }
+    };
+    window.addEventListener("hashchange", handleHash);
+    return () => window.removeEventListener("hashchange", handleHash);
+  }, []);
+
   const handleTabClick = (tabKey: string) => {
     setActiveTab(tabKey);
+    if (typeof window !== "undefined") {
+      if (tabKey === "qrcode") {
+        window.location.hash = "qrcode";
+      } else if (tabKey === "prize") {
+        if (window.location.hash) {
+          window.history.replaceState(null, "", window.location.pathname);
+        }
+      } else {
+        window.location.hash = tabKey;
+      }
+    }
     setTimeout(() => {
       const el = document.getElementById(`tab-${tabKey}`);
       if (el) {
@@ -804,13 +847,32 @@ export default function App() {
             </motion.div>
           )}
 
+          {/* TAB: PREDICTION QR CODE PAGE */}
+          {activeTab === "qrcode" && (
+            <motion.div
+              key="qrcode"
+              initial={{ opacity: 0, y: 15 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -15 }}
+              transition={{ duration: 0.3 }}
+              className="w-full"
+            >
+              <PredictionQRCodePage
+                onBack={() => {
+                  handleTabClick("prize");
+                  window.scrollTo({ top: 0, behavior: "smooth" });
+                }}
+              />
+            </motion.div>
+          )}
+
         </AnimatePresence>
       </main>
 
       {/* 6. IMMERSIVE CULTURAL & MATCH DAY FOOTER */}
       <footer className="bg-[#0e2217] border-t border-[#295a3d] py-12 px-4 text-center mt-12 text-xs text-stone-300">
         <div className="max-w-3xl mx-auto flex flex-col items-center gap-4">
-          <BunaLogo size="md" onClick={() => setActiveTab("prize")} />
+          <BunaLogo size="md" onClick={() => { handleTabClick("prize"); window.scrollTo({ top: 0, behavior: "smooth" }); }} />
           <p className="font-sans italic text-[#42bd6c] font-light tracking-wide mt-1">"Buna dabo naw" — Coffee is our bread.</p>
           <p className="max-w-md mx-auto leading-relaxed text-stone-300">
             Hattrick Cafe celebrates the ancient coffee heritage of Ethiopia alongside weekend matchday culture. Inspired by the highlands of Kaffa, Sidamo, and Yirgacheffe.
@@ -818,6 +880,57 @@ export default function App() {
           <p className="text-[11px] text-stone-400 font-mono">
             Hattrick Cafe is not affiliated with the Premier League or any football club.
           </p>
+
+          {/* Quick Footer Links Including Labeled "QR Code" */}
+          <div className="flex flex-wrap items-center justify-center gap-3 sm:gap-6 my-2 pt-3 border-t border-[#295a3d]/50 text-xs">
+            <button
+              type="button"
+              onClick={() => { handleTabClick("prize"); window.scrollTo({ top: 0, behavior: "smooth" }); }}
+              className="text-stone-300 hover:text-amber-300 transition-colors cursor-pointer"
+            >
+              Match Day Challenge
+            </button>
+            <span className="text-stone-600 hidden sm:inline">•</span>
+            <button
+              type="button"
+              onClick={() => { handleTabClick("map"); window.scrollTo({ top: 0, behavior: "smooth" }); }}
+              className="text-stone-300 hover:text-amber-300 transition-colors cursor-pointer"
+            >
+              Origin Map
+            </button>
+            <span className="text-stone-600 hidden sm:inline">•</span>
+            <button
+              type="button"
+              onClick={() => { handleTabClick("sensory"); window.scrollTo({ top: 0, behavior: "smooth" }); }}
+              className="text-stone-300 hover:text-amber-300 transition-colors cursor-pointer"
+            >
+              Brew Guide
+            </button>
+            <span className="text-stone-600 hidden sm:inline">•</span>
+            <button
+              type="button"
+              onClick={() => { handleTabClick("loyalty"); window.scrollTo({ top: 0, behavior: "smooth" }); }}
+              className="text-stone-300 hover:text-amber-300 transition-colors cursor-pointer"
+            >
+              Passport
+            </button>
+            <span className="text-stone-600 hidden sm:inline">•</span>
+            
+            {/* Dedicated "QR Code" Link as requested */}
+            <button
+              type="button"
+              onClick={() => { 
+                handleTabClick("qrcode"); 
+                window.scrollTo({ top: 0, behavior: "smooth" }); 
+              }}
+              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#122b1c] hover:bg-[#1a3e29] border border-amber-500/60 text-amber-300 hover:text-amber-200 font-bold transition-all shadow-sm cursor-pointer"
+              title="Open Customer Prediction Slip QR Code"
+            >
+              <QrCode size={13} className="text-amber-400" />
+              <span>QR Code</span>
+            </button>
+          </div>
+
           <div className="flex justify-center gap-4 text-[10px] font-mono uppercase tracking-widest mt-2 text-[#42bd6c]">
             <span>Coffee & Soccer Edition</span>
             <span>•</span>
